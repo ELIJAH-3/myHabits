@@ -8,7 +8,6 @@
   const NAME_W = 228;
   const TAIL_W = 132;
   const MIN_HISTORY = 90;
-  const SCROLL_EXTEND = 90;
   const IDENTITY_HALF_LIFE = 21;
   const IDENTITY_TAU = 45;
   const IDENTITY_ALPHA = 1 - Math.pow(0.5, 1 / IDENTITY_HALF_LIFE);
@@ -363,7 +362,7 @@
   async function errorMessage(res) {
     try {
       const body = await res.json();
-      const message = body.message || `JSONBin error ${res.status}`;
+      log("jsonbin error body", { status: res.status, message });
       if (/invalid x-master-key|does not belong/i.test(message)) {
         return "JSONBin rejected the key or bin. Use the Master Key from jsonbin.io/api-keys with a Bin ID created on that same account. Paste values without quotes. Keys should start with $2a$ or $2b$.";
       }
@@ -658,6 +657,7 @@
     const scrollHint = pin ? 0 : opts.preserveScroll != null ? opts.preserveScroll : els.gridWrap.scrollLeft;
     const { start, count, total } = visibleRange(scrollHint, pin);
     state.visIndex = start;
+    log("renderGrid", { pin, start, count, total, habits: state.data.habits.length });
 
     els.grid.style.setProperty("--name-w", `${NAME_W}px`);
     els.grid.style.setProperty("--tail-w", `${TAIL_W}px`);
@@ -919,6 +919,7 @@
   }
 
   function renderDetail() {
+    log("renderDetail", { habitId: state.detailHabitId, freqUnit: state.freqUnit, heatYear: state.heatYear });
     if (!state.detailHabitId) return;
     const habit = state.data.habits.find((item) => item.id === state.detailHabitId);
     if (!habit) {
@@ -1003,13 +1004,16 @@
     }
   }
 
-  function extendTimelineIfNeeded() {
-    if (state.ignoreScroll) return false;
-    if (els.gridWrap.scrollLeft >= CELL_W * 12) return false;
-    const added = SCROLL_EXTEND;
-    state.timelineStart = addDays(state.timelineStart, -added);
-    renderGrid({ preserveScroll: els.gridWrap.scrollLeft + added * CELL_W });
-    return true;
+  function maxScrollLeft() {
+    return Math.max(0, els.gridWrap.scrollWidth - els.gridWrap.clientWidth);
+  }
+
+  function scrollByDays(days) {
+    const next = els.gridWrap.scrollLeft + days * CELL_W;
+    const max = maxScrollLeft();
+    const clamped = Math.max(0, Math.min(max, next));
+    log("scrollByDays", { days, from: els.gridWrap.scrollLeft, to: clamped, max });
+    els.gridWrap.scrollLeft = clamped;
   }
 
   function openSetup() {
@@ -1060,6 +1064,7 @@
       setSync("ok", "synced // jsonbin");
       closeSetup();
       render({ pinToToday: true });
+      log("connect ok", credSummary(state.creds));
     } catch (err) {
       logError("connect failed", err);
       els.setupError.textContent = err.message || "Could not connect.";
@@ -1150,7 +1155,6 @@
 
   els.gridWrap.addEventListener("scroll", () => {
     if (state.ignoreScroll) return;
-    if (extendTimelineIfNeeded()) return;
     const idx = Math.floor(els.gridWrap.scrollLeft / CELL_W);
     if (Math.abs(idx - state.visIndex) >= 4) {
       renderGrid({ preserveScroll: els.gridWrap.scrollLeft });
@@ -1159,17 +1163,12 @@
 
   document.getElementById("jump-older").addEventListener("click", () => {
     log("jump older");
-    if (els.gridWrap.scrollLeft < CELL_W * 40) {
-      state.timelineStart = addDays(state.timelineStart, -SCROLL_EXTEND);
-      renderGrid({ preserveScroll: els.gridWrap.scrollLeft + SCROLL_EXTEND * CELL_W - 30 * CELL_W });
-      return;
-    }
-    els.gridWrap.scrollLeft -= 30 * CELL_W;
+    scrollByDays(-30);
   });
 
   document.getElementById("jump-newer").addEventListener("click", () => {
     log("jump newer");
-    els.gridWrap.scrollLeft += 30 * CELL_W;
+    scrollByDays(30);
   });
 
   document.getElementById("jump-today").addEventListener("click", () => {
