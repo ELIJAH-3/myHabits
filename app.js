@@ -120,12 +120,33 @@
     return (date.getDay() + 6) % 7;
   }
 
+  function cleanSecret(value) {
+    let v = String(value || "").trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1).trim();
+    }
+    if (/^bearer\s+/i.test(v)) v = v.replace(/^bearer\s+/i, "").trim();
+    return v;
+  }
+
+  function cleanBinId(value) {
+    let id = cleanSecret(value);
+    const fromUrl = id.match(/\/(?:v3\/)?b\/([A-Za-z0-9]+)(?:\/|$)/);
+    if (fromUrl) return fromUrl[1];
+    const parts = id.split("/").filter(Boolean);
+    if (parts.length > 1) {
+      const last = parts[parts.length - 1];
+      return last === "latest" ? parts[parts.length - 2] : last;
+    }
+    return id;
+  }
+
   function envCreds() {
     const cfg = window.PULSE_CONFIG || {};
-    const apiKey = String(cfg.apiKey || "").trim();
-    const binId = String(cfg.binId || "").trim();
+    const apiKey = cleanSecret(cfg.apiKey);
+    const binId = cleanBinId(cfg.binId);
     if (!apiKey) return null;
-    return { apiKey, binId, fromEnv: true };
+    return { apiKey, binId, keyType: cfg.keyType || "master", fromEnv: true };
   }
 
   function loadCreds() {
@@ -139,18 +160,25 @@
     if (env) {
       return {
         apiKey: env.apiKey,
-        binId: env.binId || (local && local.binId) || "",
+        binId: env.binId || (local && cleanBinId(local.binId)) || "",
+        keyType: env.keyType || "master",
         fromEnv: true,
       };
     }
-    return local;
+    if (local) {
+      return {
+        apiKey: cleanSecret(local.apiKey),
+        binId: cleanBinId(local.binId),
+      };
+    }
+    return null;
   }
 
   function saveCreds(creds) {
     const fromEnv = Boolean(state.creds && state.creds.fromEnv) || Boolean(creds && creds.fromEnv);
     state.creds = Object.assign({}, creds, { fromEnv });
     if (fromEnv) return;
-    if (creds) localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey: creds.apiKey, binId: creds.binId }));
+    if (creds) localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey: creds.apiKey, binId: creds.binId, keyType: creds.keyType }));
     else localStorage.removeItem(CREDS_KEY);
   }
 
@@ -168,30 +196,52 @@
     localStorage.setItem(CACHE_KEY, JSON.stringify(state.data));
   }
 
-  function authHeaders(extra) {
-    return Object.assign({ "X-Master-Key": state.creds.apiKey }, extra);
+  function authHeaders(extra, kind) {
+    const key = cleanSecret(state.creds.apiKey);
+    const headers = Object.assign({}, extra);
+    if (kind === "access") headers["X-Access-Key"] = key;
+    else headers["X-Master-Key"] = key;
+    return headers;
+  }
+
+  async function jsonbinRequest(url, options, extraHeaders) {
+    const preferred = state.creds.keyType === "access" ? ["access", "master"] : ["master", "access"];
+    let lastRes = null;
+    for (const kind of preferred) {
+      lastRes = await fetch(
+        url,
+        Object.assign({}, options, { headers: authHeaders(extraHeaders, kind) })
+      );
+      if (lastRes.ok) {
+        state.creds.keyType = kind;
+        return lastRes;
+      }
+      if (lastRes.status !== 401) return lastRes;
+    }
+    return lastRes;
   }
 
   async function readRemote() {
-    const res = await fetch(`${API}/b/${state.creds.binId}/latest`, {
-      cache: "no-store",
-      headers: authHeaders({ "X-Bin-Meta": "false" }),
-    });
+    const res = await jsonbinRequest(
+      `${API}/b/${cleanBinId(state.creds.binId)}/latest`,
+      { cache: "no-store" },
+      { "X-Bin-Meta": "false" }
+    );
     if (!res.ok) throw new Error(await errorMessage(res));
     const payload = await res.json();
     return payload.record || payload;
   }
 
   async function createRemote(data) {
-    const res = await fetch(`${API}/b`, {
-      method: "POST",
-      headers: authHeaders({
+    const res = await jsonbinRequest(
+      `${API}/b`,
+      { method: "POST", body: JSON.stringify(data) },
+      {
         "Content-Type": "application/json",
         "X-Bin-Name": "pulse-habit-tracker",
         "X-Bin-Private": "true",
-      }),
-      body: JSON.stringify(data),
-    });
+      }
+    );
     if (!res.ok) throw new Error(await errorMessage(res));
     const payload = await res.json();
     const id = payload.metadata && payload.metadata.id;
@@ -200,21 +250,25 @@
   }
 
   async function updateRemote(data) {
-    const res = await fetch(`${API}/b/${state.creds.binId}`, {
-      method: "PUT",
-      headers: authHeaders({
+    const res = await jsonbinRequest(
+      `${API}/b/${cleanBinId(state.creds.binId)}`,
+      { method: "PUT", body: JSON.stringify(data) },
+      {
         "Content-Type": "application/json",
         "X-Bin-Versioning": "false",
-      }),
-      body: JSON.stringify(data),
-    });
+      }
+    );
     if (!res.ok) throw new Error(await errorMessage(res));
   }
 
   async function errorMessage(res) {
     try {
       const body = await res.json();
-      return body.message || `JSONBin error ${res.status}`;
+      const message = body.message || `JSONBin error ${res.status}`;
+      if (/invalid x-master-key|does not belong/i.test(message)) {
+        return "JSONBin rejected the key or bin. Use the Master Key from jsonbin.io/api-keys with a Bin ID created on that same account. Paste values without quotes. Keys should start with $2a$ or $2b$.";
+      }
+      return message;
     } catch {
       return `JSONBin error ${res.status}`;
     }
@@ -860,7 +914,7 @@
     els.connectBtn.disabled = true;
     els.connectBtn.textContent = "linking…";
     try {
-      saveCreds({ apiKey, binId });
+      saveCreds({ apiKey: cleanSecret(apiKey), binId: cleanBinId(binId) });
       if (!state.creds.binId) {
         const id = await createRemote(state.data);
         saveCreds({ apiKey, binId: id });

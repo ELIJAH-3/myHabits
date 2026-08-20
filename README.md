@@ -34,6 +34,8 @@ Static sites only see env vars during the **build**. `node build-config.js` writ
 4. Build command: `node build-config.js`
 5. Publish directory: `.`
 
+The Master Key and Bin ID must belong to the **same** JSONBin account. Paste them with no quotes. A valid key starts with `$2a$` or `$2b$`.
+
 `config.js` is generated at build time and is not committed. Anyone who can view the live site can also read that file, so treat this as a personal app.
 
 ## Tracking
