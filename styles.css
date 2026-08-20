@@ -286,6 +286,10 @@ body {
   scrollbar-color: var(--accent) transparent;
 }
 
+.grid-wrap.is-reordering {
+  overflow-anchor: none;
+}
+
 .habit-grid {
   --name-w: 244px;
   --tail-w: 132px;

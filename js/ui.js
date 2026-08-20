@@ -60,7 +60,7 @@ export function bindElements() {
   return els;
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -290,6 +290,12 @@ export function render(els, state, opts) {
     state.detailHabitId = null;
     els.detail.classList.add("hidden");
   }
+}
+
+export function pinScrollIfReordering(wrap, lockedLeft, isReordering) {
+  if (!isReordering || lockedLeft == null || !wrap) return false;
+  if (wrap.scrollLeft !== lockedLeft) wrap.scrollLeft = lockedLeft;
+  return true;
 }
 
 export function maxScrollLeft(els) {

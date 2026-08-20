@@ -1,6 +1,12 @@
 import { IDENTITY_ALPHA, IDENTITY_TAU, MIN_HISTORY } from "./constants.js";
 import { addDays, diffDays, parseISODate, startOfDay, toISODate, today } from "./dates.js";
 
+function asOfDay(asOf) {
+  if (!asOf) return today();
+  if (asOf instanceof Date) return startOfDay(asOf);
+  return startOfDay(parseISODate(asOf));
+}
+
 export function emptyData() {
   return { habits: [], checks: {} };
 }
@@ -15,8 +21,8 @@ export function habitChecked(data, habitId, iso) {
   return Boolean(data.checks[habitId] && data.checks[habitId][iso]);
 }
 
-export function habitStart(data, habit) {
-  let start = habit.createdAt ? startOfDay(parseISODate(habit.createdAt)) : today();
+export function habitStart(data, habit, asOf) {
+  let start = habit.createdAt ? startOfDay(parseISODate(habit.createdAt)) : asOfDay(asOf);
   const checks = data.checks[habit.id] || {};
   for (const iso of Object.keys(checks)) {
     const date = parseISODate(iso);
@@ -26,8 +32,8 @@ export function habitStart(data, habit) {
 }
 
 export function identitySeries(data, habit, until) {
-  const end = until || today();
-  const start = habitStart(data, habit);
+  const end = asOfDay(until);
+  const start = habitStart(data, habit, end);
   const points = [];
   if (start > end) return points;
   let ema = null;
@@ -46,9 +52,9 @@ export function identitySeries(data, habit, until) {
   return points;
 }
 
-export function habitScore(data, habit, memo) {
+export function habitScore(data, habit, memo, asOf) {
   if (memo && memo.has(habit.id)) return memo.get(habit.id);
-  const series = identitySeries(data, habit);
+  const series = identitySeries(data, habit, asOf);
   const score = series.length ? Math.round(series[series.length - 1].score) : 0;
   if (memo) memo.set(habit.id, score);
   return score;
@@ -62,9 +68,9 @@ export function identityCaption(score) {
   return "spark";
 }
 
-export function habitStreak(data, habit) {
+export function habitStreak(data, habit, asOf) {
   let streak = 0;
-  let cursor = today();
+  let cursor = asOfDay(asOf);
   if (!habitChecked(data, habit.id, toISODate(cursor))) cursor = addDays(cursor, -1);
   while (habitChecked(data, habit.id, toISODate(cursor))) {
     streak += 1;
@@ -73,9 +79,9 @@ export function habitStreak(data, habit) {
   return streak;
 }
 
-export function allStreaks(data, habit) {
-  const start = habitStart(data, habit);
-  const end = today();
+export function allStreaks(data, habit, asOf) {
+  const end = asOfDay(asOf);
+  const start = habitStart(data, habit, end);
   const streaks = [];
   let run = null;
   for (let date = start; date <= end; date = addDays(date, 1)) {
@@ -91,8 +97,8 @@ export function allStreaks(data, habit) {
     }
   }
   if (run) streaks.push(run);
-  const currentLen = habitStreak(data, habit);
-  const liveEnd = habitChecked(data, habit.id, toISODate(today())) ? today() : addDays(today(), -1);
+  const currentLen = habitStreak(data, habit, end);
+  const liveEnd = habitChecked(data, habit.id, toISODate(end)) ? end : addDays(end, -1);
   return streaks
     .map((item) => {
       const live = currentLen > 0 && item.length === currentLen && diffDays(item.end, liveEnd) === 0;
@@ -101,40 +107,41 @@ export function allStreaks(data, habit) {
     .sort((a, b) => b.length - a.length || b.end - a.end);
 }
 
-export function longestStreak(data, habit) {
-  const streaks = allStreaks(data, habit);
+export function longestStreak(data, habit, asOf) {
+  const streaks = allStreaks(data, habit, asOf);
   return streaks.length ? streaks[0].length : 0;
 }
 
-export function overallScore(data, memo) {
+export function overallScore(data, memo, asOf) {
   if (!data.habits.length) return 0;
-  const total = data.habits.reduce((sum, habit) => sum + habitScore(data, habit, memo), 0);
+  const total = data.habits.reduce((sum, habit) => sum + habitScore(data, habit, memo, asOf), 0);
   return Math.round(total / data.habits.length);
 }
 
-export function bestStreakAll(data) {
-  return data.habits.reduce((max, habit) => Math.max(max, longestStreak(data, habit)), 0);
+export function bestStreakAll(data, asOf) {
+  return data.habits.reduce((max, habit) => Math.max(max, longestStreak(data, habit, asOf)), 0);
 }
 
-export function todayCounts(data) {
-  const iso = toISODate(today());
+export function todayCounts(data, asOf) {
+  const iso = toISODate(asOfDay(asOf));
   const total = data.habits.length;
   const done = data.habits.filter((habit) => habitChecked(data, habit.id, iso)).length;
   return { done, total };
 }
 
-export function dataEarliest(data) {
-  let min = today();
+export function dataEarliest(data, asOf) {
+  let min = asOfDay(asOf);
   for (const habit of data.habits) {
-    const start = habitStart(data, habit);
+    const start = habitStart(data, habit, min);
     if (start < min) min = start;
   }
   return min;
 }
 
-export function boundedTimelineStart(data, currentStart) {
-  const floor = addDays(today(), -(MIN_HISTORY - 1));
-  const earliest = dataEarliest(data);
+export function boundedTimelineStart(data, currentStart, asOf) {
+  const now = asOfDay(asOf);
+  const floor = addDays(now, -(MIN_HISTORY - 1));
+  const earliest = dataEarliest(data, now);
   const need = earliest < floor ? earliest : floor;
   return need < currentStart ? need : currentStart;
 }
@@ -151,8 +158,8 @@ export function reorderHabits(habits, fromId, toId) {
   return list;
 }
 
-export function toggleCheck(data, habitId, iso) {
-  if (parseISODate(iso) > today()) return data;
+export function toggleCheck(data, habitId, iso, asOf) {
+  if (parseISODate(iso) > asOfDay(asOf)) return data;
   const checks = Object.assign({}, data.checks);
   const bag = Object.assign({}, checks[habitId] || {});
   if (bag[iso]) delete bag[iso];

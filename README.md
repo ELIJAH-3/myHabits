@@ -10,6 +10,16 @@ HTML, CSS, and ES modules. No backend. Render hosts the static site; `node build
 
 Open `index.html` in a browser, or serve the folder. Connect a JSONBin API key in settings, or continue locally (browser cache only).
 
+## Tests
+
+Regression tests use Node’s built-in runner (Node 18+). No extra packages.
+
+```bash
+npm test
+```
+
+They lock identity scoring (new habits cannot hit 100% quickly), the bounded timeline, date formatting, JSONBin key handling, and the HTML shell.
+
 ## Render
 
 Set `JSONBIN_API_KEY` and `JSONBIN_BIN_ID`. Build command: `node build-config.js`. Publish directory: `.`

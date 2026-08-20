@@ -26,6 +26,7 @@ import {
   openDetail,
   openSetup,
   render,
+  pinScrollIfReordering,
   renderClock,
   renderGrid,
   scrollByDays,
@@ -47,6 +48,7 @@ const state = {
   scoreMemo: new Map(),
   visIndex: -1,
   dragHabitId: null,
+  dragScrollLeft: null,
   detailHabitId: null,
   freqUnit: "month",
   heatYear: new Date().getFullYear(),
@@ -62,6 +64,30 @@ function ignoreScroll(value) {
 
 function viewOpts(extra) {
   return Object.assign({ ignoreScroll }, extra);
+}
+
+function pinCalendarScroll() {
+  return pinScrollIfReordering(els.gridWrap, state.dragScrollLeft, state.dragScrollLeft != null);
+}
+
+function beginReorder(id) {
+  state.dragHabitId = id;
+  state.dragScrollLeft = els.gridWrap.scrollLeft;
+  els.gridWrap.classList.add("is-reordering");
+  log("beginReorder", { id, scrollLeft: state.dragScrollLeft });
+}
+
+function endReorder() {
+  const left = state.dragScrollLeft;
+  state.dragHabitId = null;
+  state.dragScrollLeft = null;
+  els.gridWrap.classList.remove("is-reordering");
+  if (left != null) {
+    ignoreScroll(true);
+    els.gridWrap.scrollLeft = left;
+    ignoreScroll(false);
+  }
+  return left;
 }
 
 function schedulePush() {
@@ -255,42 +281,55 @@ els.grid.addEventListener("dragstart", (event) => {
     event.preventDefault();
     return;
   }
-  state.dragHabitId = handle.dataset.drag;
-  event.dataTransfer.setData("text/plain", state.dragHabitId);
+  event.dataTransfer.setData("text/plain", handle.dataset.drag);
   event.dataTransfer.effectAllowed = "move";
   const row = handle.closest(".habit-row");
   if (row) row.classList.add("dragging");
-  log("dragstart", { id: state.dragHabitId });
+  beginReorder(handle.dataset.drag);
 });
 
-els.grid.addEventListener("dragover", (event) => {
-  if (!state.dragHabitId) return;
-  const row = event.target.closest(".habit-row");
-  if (!row) return;
+function onReorderDragOver(event) {
+  if (state.dragHabitId == null) return;
   event.preventDefault();
-  event.dataTransfer.dropEffect = "move";
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  pinCalendarScroll();
+  const row = event.target.closest && event.target.closest(".habit-row");
+  if (!row) return;
   for (const item of els.grid.querySelectorAll(".habit-row.drag-over")) item.classList.remove("drag-over");
   if (row.dataset.habitRow !== state.dragHabitId) row.classList.add("drag-over");
-});
+}
+
+els.grid.addEventListener("dragover", onReorderDragOver);
+els.gridWrap.addEventListener("dragover", onReorderDragOver, true);
+document.addEventListener(
+  "dragover",
+  (event) => {
+    if (state.dragScrollLeft == null) return;
+    pinCalendarScroll();
+    if (els.gridWrap.contains(event.target)) event.preventDefault();
+  },
+  true
+);
 
 els.grid.addEventListener("drop", (event) => {
   const row = event.target.closest(".habit-row");
   if (!row || !state.dragHabitId) return;
   event.preventDefault();
   const toId = row.dataset.habitRow;
-  log("drop", { fromId: state.dragHabitId, toId });
-  state.data.habits = reorderHabits(state.data.habits, state.dragHabitId, toId);
-  state.dragHabitId = null;
+  const fromId = state.dragHabitId;
+  log("drop", { fromId, toId });
+  state.data.habits = reorderHabits(state.data.habits, fromId, toId);
+  const left = state.dragScrollLeft;
   schedulePush();
-  paint();
+  paint(left != null ? { preserveScroll: left } : {});
 });
 
 els.grid.addEventListener("dragend", () => {
-  state.dragHabitId = null;
+  const left = endReorder();
   for (const item of els.grid.querySelectorAll(".habit-row.dragging, .habit-row.drag-over")) {
     item.classList.remove("dragging", "drag-over");
   }
-  log("dragend");
+  log("dragend", { scrollLeft: left });
 });
 
 els.addToggle.addEventListener("click", () => {
@@ -310,6 +349,11 @@ els.addForm.addEventListener("submit", (event) => {
 els.gridWrap.addEventListener(
   "wheel",
   (event) => {
+    if (state.dragScrollLeft != null) {
+      event.preventDefault();
+      pinCalendarScroll();
+      return;
+    }
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     event.preventDefault();
     els.gridWrap.scrollLeft += event.deltaY;
@@ -318,6 +362,10 @@ els.gridWrap.addEventListener(
 );
 
 els.gridWrap.addEventListener("scroll", () => {
+  if (state.dragScrollLeft != null) {
+    pinCalendarScroll();
+    return;
+  }
   if (state.ignoreScroll) return;
   const idx = Math.floor(els.gridWrap.scrollLeft / CELL_W);
   if (Math.abs(idx - state.visIndex) >= 4) {

@@ -1,5 +1,5 @@
 import { HEAT_WD, MONTHS } from "./constants.js";
-import { addDays, formatShort, mondayOf, parseISODate, toISODate, today } from "./dates.js";
+import { addDays, formatShort, mondayOf, parseISODate, startOfDay, toISODate, today } from "./dates.js";
 import { habitChecked, habitStart } from "./model.js";
 
 function downsample(points, max) {
@@ -50,9 +50,9 @@ export function lineChart(points) {
     </svg>`;
 }
 
-export function freqBuckets(data, habit, unit) {
-  const start = habitStart(data, habit);
-  const end = today();
+export function freqBuckets(data, habit, unit, until) {
+  const end = until ? startOfDay(until instanceof Date ? until : parseISODate(until)) : today();
+  const start = habitStart(data, habit, end);
   const keys = [];
   const counts = new Map();
 

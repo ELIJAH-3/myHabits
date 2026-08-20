@@ -1,3 +1,5 @@
+const quiet = typeof process !== "undefined" && process.env && process.env.NODE_TEST_CONTEXT;
+
 export function redactKey(key) {
   const value = String(key || "");
   if (!value) return "(empty)";
@@ -16,15 +18,18 @@ export function credSummary(creds) {
 }
 
 export function log(step, detail) {
+  if (quiet) return;
   if (arguments.length > 1) console.log("[pulse]", step, detail);
   else console.log("[pulse]", step);
 }
 
 export function logWarn(step, detail) {
+  if (quiet) return;
   if (arguments.length > 1) console.warn("[pulse]", step, detail);
   else console.warn("[pulse]", step);
 }
 
 export function logError(step, err) {
+  if (quiet) return;
   console.error("[pulse]", step, err);
 }
