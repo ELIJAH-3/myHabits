@@ -13,8 +13,21 @@
   const IDENTITY_TAU = 45;
   const IDENTITY_ALPHA = 1 - Math.pow(0.5, 1 / IDENTITY_HALF_LIFE);
 
-  const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
-  const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const MONTHS = [
+    "JANUARY",
+    "FEBRUARY",
+    "MARCH",
+    "APRIL",
+    "MAY",
+    "JUNE",
+    "JULY",
+    "AUGUST",
+    "SEPTEMBER",
+    "OCTOBER",
+    "NOVEMBER",
+    "DECEMBER",
+  ];
   const HEAT_WD = ["m", "t", "w", "t", "f", "s", "s"];
 
   const els = {
@@ -522,7 +535,7 @@
   function dayHeadHtml(date, nowIso) {
     const iso = toISODate(date);
     const isToday = iso === nowIso;
-    const month = date.getDate() === 1 ? MONTHS[date.getMonth()] : "";
+    const month = date.getDate() === 1 ? MONTHS[date.getMonth()].slice(0, 3) : "";
     return `
       <div class="day-slot day-head ${isToday ? "today" : ""}">
         <span class="day-month">${month}</span>
@@ -549,8 +562,8 @@
     if (!state.data.habits.length) {
       els.grid.innerHTML = `
         <div class="empty">
-          <strong>no protocols initialized</strong>
-          add a habit, then scroll the lifetime log
+          <strong>No habits yet</strong>
+          Add a habit, then tick the days
         </div>`;
       els.rangeLabel.textContent = "scroll through days";
       return;
@@ -666,16 +679,16 @@
         ${yTicks
           .map(
             (tick) => `
-          <line x1="${l}" x2="${w - r}" y1="${yAt(tick)}" y2="${yAt(tick)}" stroke="rgba(61,255,232,0.12)" />
-          <text x="${l - 8}" y="${yAt(tick) + 4}" text-anchor="end" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${tick}</text>`
+          <line x1="${l}" x2="${w - r}" y1="${yAt(tick)}" y2="${yAt(tick)}" stroke="#c0c0c0" />
+          <text x="${l - 8}" y="${yAt(tick) + 4}" text-anchor="end" fill="#404040" font-size="11" font-family="Tahoma, sans-serif">${tick}</text>`
           )
           .join("")}
-        <path d="${area}" fill="rgba(61,255,232,0.12)"></path>
-        <path d="${line}" fill="none" stroke="#3dffe8" stroke-width="2.2"></path>
+        <path d="${area}" fill="rgba(0,0,128,0.12)"></path>
+        <path d="${line}" fill="none" stroke="#000080" stroke-width="2"></path>
         ${xTicks
           .map((i) => {
             const label = formatShort(series[i].date);
-            return `<text x="${xAt(i)}" y="${h - 12}" text-anchor="middle" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${label}</text>`;
+            return `<text x="${xAt(i)}" y="${h - 12}" text-anchor="middle" fill="#404040" font-size="11" font-family="Tahoma, sans-serif">${label}</text>`;
           })
           .join("")}
       </svg>`;
@@ -748,14 +761,14 @@
         const bh = (item.value / maxVal) * ih;
         const y = t + ih - bh;
         return `
-          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, item.value ? 2 : 0)}" fill="#3dffe8" opacity="0.88"></rect>
-          <text x="${x + barW / 2}" y="${t + ih + 14}" text-anchor="middle" fill="#7d938d" font-size="10" font-family="Oxanium, sans-serif" transform="rotate(-48 ${x + barW / 2} ${t + ih + 14})">${item.label}</text>
-          <text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" fill="#e7f6f2" font-size="10" font-family="Oxanium, sans-serif">${item.value}</text>`;
+          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, item.value ? 2 : 0)}" fill="#000080"></rect>
+          <text x="${x + barW / 2}" y="${t + ih + 14}" text-anchor="middle" fill="#404040" font-size="10" font-family="Tahoma, sans-serif" transform="rotate(-48 ${x + barW / 2} ${t + ih + 14})">${item.label}</text>
+          <text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" fill="#000000" font-size="10" font-family="Tahoma, sans-serif">${item.value}</text>`;
       })
       .join("");
     return `
       <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Ticks by ${unit}">
-        <line x1="${l}" x2="${w - r}" y1="${t + ih}" y2="${t + ih}" stroke="rgba(61,255,232,0.2)" />
+        <line x1="${l}" x2="${w - r}" y1="${t + ih}" y2="${t + ih}" stroke="#808080" />
         ${bars}
       </svg>`;
   }
@@ -774,7 +787,7 @@
         let label = "";
         for (let i = 0; i < 7; i++) {
           const d = addDays(weekStart, i);
-          if (d.getFullYear() === year && d.getDate() === 1) label = MONTHS[d.getMonth()];
+          if (d.getFullYear() === year && d.getDate() === 1) label = MONTHS[d.getMonth()].slice(0, 3);
         }
         const cells = Array.from({ length: 7 }, (_, i) => {
           const d = addDays(weekStart, i);

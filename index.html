@@ -3,25 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#07090d" />
-    <title>PULSE — habit protocol</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2307090d'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%233dffe8' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%233dffe8'/%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Outfit:wght@300;400;500;600&display=swap"
-      rel="stylesheet"
-    />
+    <meta name="theme-color" content="#008080" />
+    <title>PULSE — Habit Tracker</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23008080'/%3E%3Crect x='6' y='6' width='20' height='20' fill='%23c0c0c0' stroke='%23000080' stroke-width='2'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="bg-orb bg-orb-a" aria-hidden="true"></div>
-    <div class="bg-orb bg-orb-b" aria-hidden="true"></div>
-    <div class="scanlines" aria-hidden="true"></div>
-
     <div id="setup" class="setup hidden" role="dialog" aria-labelledby="setup-title">
       <div class="setup-card hud-frame">
-        <p class="kicker">link // storage</p>
+        <p class="kicker">Storage</p>
         <h1 id="setup-title">Connect JSONBin</h1>
         <p class="setup-copy">
           Data lives in a private bin on
@@ -38,7 +28,7 @@
         </label>
         <p id="setup-error" class="error hidden"></p>
         <div class="setup-actions">
-          <button id="connect-btn" class="btn primary" type="button">Establish link</button>
+          <button id="connect-btn" class="btn primary" type="button">Connect</button>
           <button id="setup-dismiss" class="btn ghost" type="button">Continue locally</button>
         </div>
         <p id="setup-env-note" class="fine-print hidden">JSONBin is already set from environment variables on this deploy.</p>
@@ -46,135 +36,133 @@
       </div>
     </div>
 
-    <header class="topbar">
-      <div class="brand">
-        <span class="logo" aria-hidden="true"></span>
-        <div>
-          <h1>PULSE</h1>
-          <p>habit protocol</p>
+    <header class="topbar hud-frame">
+      <p class="kicker">PULSE</p>
+      <div class="topbar-row">
+        <div class="brand">
+          <h1>Habit Tracker</h1>
         </div>
-      </div>
-      <div class="topbar-meta">
-        <time id="clock" datetime=""></time>
-        <button id="settings-btn" class="btn icon" type="button" aria-label="Storage settings">⚙</button>
+        <div class="topbar-meta">
+          <time id="clock" datetime=""></time>
+          <button id="settings-btn" class="btn icon" type="button" aria-label="Storage settings">?</button>
+        </div>
       </div>
     </header>
 
     <main class="shell">
       <aside class="hud-frame score-panel">
-        <p class="kicker">habit score</p>
-        <div class="score-ring" aria-hidden="true">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="52"></circle>
-            <circle id="ring-value" class="ring-value" cx="60" cy="60" r="52"></circle>
-          </svg>
-          <div class="score-readout">
-            <strong id="score-value">0</strong>
-            <span>/100</span>
+        <p class="kicker">Habit Score</p>
+        <div class="score-panel-body">
+          <div class="score-ring" aria-hidden="true">
+            <svg viewBox="0 0 120 120">
+              <circle class="ring-track" cx="60" cy="60" r="52"></circle>
+              <circle id="ring-value" class="ring-value" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div class="score-readout">
+              <strong id="score-value">0</strong>
+              <span>/100</span>
+            </div>
           </div>
-        </div>
-        <p id="score-caption" class="score-caption">100% = second nature</p>
-        <dl class="stats">
-          <div>
-            <dt>today</dt>
-            <dd id="stat-today">0/0</dd>
+          <p id="score-caption" class="score-caption">100% = second nature</p>
+          <dl class="stats">
+            <div>
+              <dt>Today</dt>
+              <dd id="stat-today">0/0</dd>
+            </div>
+            <div>
+              <dt>Best</dt>
+              <dd id="stat-streak">0d</dd>
+            </div>
+            <div>
+              <dt>Habits</dt>
+              <dd id="stat-count">0</dd>
+            </div>
+          </dl>
+          <div class="sync-row">
+            <span id="sync-dot" class="sync-dot local"></span>
+            <span id="sync-label">local cache</span>
           </div>
-          <div>
-            <dt>best</dt>
-            <dd id="stat-streak">0d</dd>
-          </div>
-          <div>
-            <dt>habits</dt>
-            <dd id="stat-count">0</dd>
-          </div>
-        </dl>
-        <div class="sync-row">
-          <span id="sync-dot" class="sync-dot local"></span>
-          <span id="sync-label">local cache</span>
         </div>
       </aside>
 
       <section class="hud-frame board">
-        <div class="board-head">
-          <div>
-            <p class="kicker">lifetime log</p>
+        <p class="kicker">Lifetime Log</p>
+        <div class="board-body">
+          <div class="board-head">
             <h2 id="range-label">scroll through days</h2>
+            <div class="date-nav" role="group" aria-label="Timeline">
+              <button id="jump-older" class="btn ghost" type="button">&lt; Older</button>
+              <button id="jump-today" class="btn ghost" type="button">Today</button>
+              <button id="jump-newer" class="btn ghost" type="button">Newer &gt;</button>
+            </div>
           </div>
-          <div class="date-nav" role="group" aria-label="Timeline">
-            <button id="jump-older" class="btn ghost" type="button">« older</button>
-            <button id="jump-today" class="btn ghost" type="button">today</button>
-            <button id="jump-newer" class="btn ghost" type="button">newer »</button>
+
+          <div id="grid-wrap" class="grid-wrap">
+            <div id="habit-grid" class="habit-grid"></div>
           </div>
-        </div>
 
-        <div id="grid-wrap" class="grid-wrap">
-          <div id="habit-grid" class="habit-grid"></div>
+          <form id="add-form" class="add-form">
+            <label class="sr-only" for="habit-name">New habit</label>
+            <input id="habit-name" type="text" maxlength="48" placeholder="New habit" required />
+            <button class="btn primary" type="submit">Add</button>
+          </form>
         </div>
-
-        <form id="add-form" class="add-form">
-          <label class="sr-only" for="habit-name">New habit</label>
-          <input id="habit-name" type="text" maxlength="48" placeholder="initialize a habit — e.g. morning run" required />
-          <button class="btn primary" type="submit">Add</button>
-        </form>
       </section>
     </main>
 
-    <footer class="foot">
-      <span>frontend only · jsonbin.io</span>
-      <span>scroll days · click a habit for graphs</span>
-    </footer>
-
     <div id="habit-detail" class="detail hidden" role="dialog" aria-modal="true" aria-labelledby="detail-name">
       <div class="detail-card hud-frame">
-        <div class="detail-head">
-          <div>
-            <p class="kicker">identity dossier</p>
-            <h2 id="detail-name">habit</h2>
-            <p id="detail-score-line" class="detail-score-line"></p>
+        <p class="kicker">Habit Details</p>
+        <div class="detail-body">
+          <div class="detail-head">
+            <div>
+              <h2 id="detail-name">habit</h2>
+              <p id="detail-score-line" class="detail-score-line"></p>
+            </div>
+            <button id="detail-close" class="btn ghost" type="button">Close</button>
           </div>
-          <button id="detail-close" class="btn ghost" type="button">close</button>
+
+          <section class="detail-block">
+            <p class="section-label">Identity over time</p>
+            <p class="chart-hint">Score % vs days. 100% means this habit is second nature.</p>
+            <div id="chart-score" class="chart"></div>
+          </section>
+
+          <section class="detail-block">
+            <div class="block-head">
+              <div>
+                <p class="section-label">Ticks over time</p>
+                <p class="chart-hint">How many times this habit was logged in each period.</p>
+              </div>
+              <div id="freq-seg" class="seg" role="group" aria-label="Frequency grouping">
+                <button type="button" data-freq="week">Week</button>
+                <button type="button" data-freq="month" class="on">Month</button>
+                <button type="button" data-freq="year">Year</button>
+              </div>
+            </div>
+            <div id="chart-freq" class="chart chart-scroll"></div>
+          </section>
+
+          <section class="detail-block">
+            <div class="block-head">
+              <div>
+                <p class="section-label">Heatmap</p>
+                <p class="chart-hint">Every logged day, forever.</p>
+              </div>
+              <div class="date-nav">
+                <button id="heat-prev" class="btn ghost tight" type="button">&lt;</button>
+                <span id="heat-year" class="year-label"></span>
+                <button id="heat-next" class="btn ghost tight" type="button">&gt;</button>
+              </div>
+            </div>
+            <div id="heatmap" class="heatmap-wrap"></div>
+          </section>
+
+          <section class="detail-block">
+            <p class="section-label">Best streaks</p>
+            <ul id="streak-list" class="streak-list"></ul>
+          </section>
         </div>
-
-        <section class="detail-block">
-          <p class="kicker">identity over time</p>
-          <p class="chart-hint">Score % vs days. 100% means this habit is second nature.</p>
-          <div id="chart-score" class="chart"></div>
-        </section>
-
-        <section class="detail-block">
-          <div class="block-head">
-            <div>
-              <p class="kicker">ticks over time</p>
-              <p class="chart-hint">How many times this habit was logged in each period.</p>
-            </div>
-            <div id="freq-seg" class="seg" role="group" aria-label="Frequency grouping">
-              <button type="button" data-freq="week">week</button>
-              <button type="button" data-freq="month" class="on">month</button>
-              <button type="button" data-freq="year">year</button>
-            </div>
-          </div>
-          <div id="chart-freq" class="chart chart-scroll"></div>
-        </section>
-
-        <section class="detail-block">
-          <div class="block-head">
-            <div>
-              <p class="kicker">heatmap</p>
-              <p class="chart-hint">Every logged day, forever.</p>
-            </div>
-            <div class="date-nav">
-              <button id="heat-prev" class="btn ghost tight" type="button">«</button>
-              <span id="heat-year" class="year-label"></span>
-              <button id="heat-next" class="btn ghost tight" type="button">»</button>
-            </div>
-          </div>
-          <div id="heatmap" class="heatmap-wrap"></div>
-        </section>
-
-        <section class="detail-block">
-          <p class="kicker">best streaks</p>
-          <ul id="streak-list" class="streak-list"></ul>
-        </section>
       </div>
     </div>
 
