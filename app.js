@@ -30,6 +30,39 @@
   ];
   const HEAT_WD = ["m", "t", "w", "t", "f", "s", "s"];
 
+  function redactKey(key) {
+    const k = String(key || "");
+    if (!k) return "(empty)";
+    return k.slice(0, 4) + "… len=" + k.length;
+  }
+
+  function credSummary(creds) {
+    if (!creds) return { present: false };
+    return {
+      present: true,
+      fromEnv: Boolean(creds.fromEnv),
+      keyType: creds.keyType || "master",
+      key: redactKey(creds.apiKey),
+      binId: creds.binId || "(empty)",
+    };
+  }
+
+  function log(step, detail) {
+    if (arguments.length > 1) console.log("[pulse]", step, detail);
+    else console.log("[pulse]", step);
+  }
+
+  function logWarn(step, detail) {
+    if (arguments.length > 1) console.warn("[pulse]", step, detail);
+    else console.warn("[pulse]", step);
+  }
+
+  function logError(step, err) {
+    console.error("[pulse]", step, err);
+  }
+
+  log("app.js executing", { href: location.href, readyState: document.readyState });
+
   const els = {
     setup: document.getElementById("setup"),
     apiKey: document.getElementById("api-key-input"),
@@ -62,6 +95,10 @@
     streakList: document.getElementById("streak-list"),
     freqSeg: document.getElementById("freq-seg"),
   };
+
+  const missingEls = Object.keys(els).filter((key) => !els[key]);
+  if (missingEls.length) logWarn("missing DOM nodes", missingEls);
+  else log("DOM nodes bound", Object.keys(els).length);
 
   const state = {
     timelineStart: addDays(startOfDay(new Date()), -(MIN_HISTORY - 1)),
@@ -158,54 +195,81 @@
     const cfg = window.PULSE_CONFIG || {};
     const apiKey = cleanSecret(cfg.apiKey);
     const binId = cleanBinId(cfg.binId);
-    if (!apiKey) return null;
+    log("read PULSE_CONFIG", {
+      hasObject: Boolean(window.PULSE_CONFIG),
+      key: redactKey(apiKey),
+      binId: binId || "(empty)",
+      keyType: cfg.keyType || "master",
+    });
+    if (!apiKey) {
+      log("env creds skipped (no API key in config.js)");
+      return null;
+    }
     return { apiKey, binId, keyType: cfg.keyType || "master", fromEnv: true };
   }
 
   function loadCreds() {
+    log("loadCreds start");
     let local = null;
     try {
       local = JSON.parse(localStorage.getItem(CREDS_KEY) || "null");
-    } catch {
+      log("localStorage creds", local ? { binId: local.binId || "(empty)", key: redactKey(local.apiKey) } : null);
+    } catch (err) {
+      logWarn("localStorage creds parse failed", err);
       local = null;
     }
     const env = envCreds();
     if (env) {
-      return {
+      const creds = {
         apiKey: env.apiKey,
         binId: env.binId || (local && cleanBinId(local.binId)) || "",
         keyType: env.keyType || "master",
         fromEnv: true,
       };
+      log("using env creds", credSummary(creds));
+      return creds;
     }
     if (local) {
-      return {
+      const creds = {
         apiKey: cleanSecret(local.apiKey),
         binId: cleanBinId(local.binId),
       };
+      log("using localStorage creds", credSummary(creds));
+      return creds;
     }
+    log("no creds found");
     return null;
   }
 
   function saveCreds(creds) {
     const fromEnv = Boolean(state.creds && state.creds.fromEnv) || Boolean(creds && creds.fromEnv);
     state.creds = Object.assign({}, creds, { fromEnv });
-    if (fromEnv) return;
+    log("saveCreds", credSummary(state.creds));
+    if (fromEnv) {
+      log("saveCreds skipped localStorage (env-managed)");
+      return;
+    }
     if (creds) localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey: creds.apiKey, binId: creds.binId, keyType: creds.keyType }));
     else localStorage.removeItem(CREDS_KEY);
   }
 
   function loadCache() {
+    log("loadCache");
     try {
       const parsed = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
-      if (parsed && Array.isArray(parsed.habits) && parsed.checks) return parsed;
-    } catch {
-      /* ignore */
+      if (parsed && Array.isArray(parsed.habits) && parsed.checks) {
+        log("cache hit", { habits: parsed.habits.length, checkBags: Object.keys(parsed.checks).length });
+        return parsed;
+      }
+      log("cache empty or invalid");
+    } catch (err) {
+      logWarn("cache parse failed", err);
     }
     return emptyData();
   }
 
   function writeCache() {
+    log("writeCache", { habits: state.data.habits.length });
     localStorage.setItem(CACHE_KEY, JSON.stringify(state.data));
   }
 
@@ -218,34 +282,52 @@
   }
 
   async function jsonbinRequest(url, options, extraHeaders) {
+    const method = (options && options.method) || "GET";
     const preferred = state.creds.keyType === "access" ? ["access", "master"] : ["master", "access"];
+    log("jsonbin request", { method, url, try: preferred });
     let lastRes = null;
     for (const kind of preferred) {
-      lastRes = await fetch(
-        url,
-        Object.assign({}, options, { headers: authHeaders(extraHeaders, kind) })
-      );
+      try {
+        lastRes = await fetch(
+          url,
+          Object.assign({}, options, { headers: authHeaders(extraHeaders, kind) })
+        );
+      } catch (err) {
+        logError("jsonbin fetch threw", { method, url, kind, err });
+        throw err;
+      }
+      log("jsonbin response", { method, url, kind, status: lastRes.status, ok: lastRes.ok });
       if (lastRes.ok) {
         state.creds.keyType = kind;
+        log("jsonbin auth accepted", { kind });
         return lastRes;
       }
       if (lastRes.status !== 401) return lastRes;
+      logWarn("jsonbin 401, trying next key type", { kind });
     }
     return lastRes;
   }
 
   async function readRemote() {
+    const binId = cleanBinId(state.creds.binId);
+    log("readRemote", { binId });
     const res = await jsonbinRequest(
-      `${API}/b/${cleanBinId(state.creds.binId)}/latest`,
+      `${API}/b/${binId}/latest`,
       { cache: "no-store" },
       { "X-Bin-Meta": "false" }
     );
     if (!res.ok) throw new Error(await errorMessage(res));
     const payload = await res.json();
-    return payload.record || payload;
+    const record = payload.record || payload;
+    log("readRemote ok", {
+      habits: record && record.habits ? record.habits.length : 0,
+      keys: record ? Object.keys(record) : [],
+    });
+    return record;
   }
 
   async function createRemote(data) {
+    log("createRemote", { habits: data.habits.length });
     const res = await jsonbinRequest(
       `${API}/b`,
       { method: "POST", body: JSON.stringify(data) },
@@ -259,12 +341,15 @@
     const payload = await res.json();
     const id = payload.metadata && payload.metadata.id;
     if (!id) throw new Error("JSONBin did not return a bin id.");
+    log("createRemote ok", { binId: id });
     return id;
   }
 
   async function updateRemote(data) {
+    const binId = cleanBinId(state.creds.binId);
+    log("updateRemote", { binId, habits: data.habits.length });
     const res = await jsonbinRequest(
-      `${API}/b/${cleanBinId(state.creds.binId)}`,
+      `${API}/b/${binId}`,
       { method: "PUT", body: JSON.stringify(data) },
       {
         "Content-Type": "application/json",
@@ -272,6 +357,7 @@
       }
     );
     if (!res.ok) throw new Error(await errorMessage(res));
+    log("updateRemote ok");
   }
 
   async function errorMessage(res) {
@@ -288,13 +374,16 @@
   }
 
   function setSync(kind, label) {
+    log("sync status", { kind, label });
     els.syncDot.className = `sync-dot ${kind}`;
     els.syncLabel.textContent = label;
   }
 
   function schedulePush() {
+    log("schedulePush");
     writeCache();
     if (!state.creds || !state.creds.binId) {
+      log("schedulePush using local cache only");
       setSync("local", "local cache");
       return;
     }
@@ -304,8 +393,13 @@
   }
 
   async function pushRemote() {
-    if (!state.creds || !state.creds.binId) return;
+    log("pushRemote");
+    if (!state.creds || !state.creds.binId) {
+      log("pushRemote aborted (no bin)");
+      return;
+    }
     if (state.pushing) {
+      log("pushRemote queued (already writing)");
       state.pendingPush = true;
       return;
     }
@@ -314,11 +408,13 @@
       await updateRemote(state.data);
       setSync("ok", "synced // jsonbin");
     } catch (err) {
+      logError("pushRemote failed", err);
       setSync("err", err.message || "sync failed");
     } finally {
       state.pushing = false;
       if (state.pendingPush) {
         state.pendingPush = false;
+        log("pushRemote running queued write");
         pushRemote();
       }
     }
@@ -333,7 +429,11 @@
   }
 
   function toggleCheck(habitId, iso) {
-    if (parseISODate(iso) > today()) return;
+    log("toggleCheck", { habitId, iso });
+    if (parseISODate(iso) > today()) {
+      log("toggleCheck ignored (future date)");
+      return;
+    }
     const bag = state.data.checks[habitId] || (state.data.checks[habitId] = {});
     if (bag[iso]) delete bag[iso];
     else bag[iso] = true;
@@ -478,7 +578,11 @@
 
   function addHabit(name) {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    log("addHabit", { name: trimmed });
+    if (!trimmed) {
+      log("addHabit ignored (empty name)");
+      return;
+    }
     state.data.habits.push({
       id: crypto.randomUUID ? crypto.randomUUID() : `h-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       name: trimmed,
@@ -491,6 +595,7 @@
   }
 
   function removeHabit(id) {
+    log("removeHabit", { id });
     state.data.habits = state.data.habits.filter((habit) => habit.id !== id);
     delete state.data.checks[id];
     if (state.detailHabitId === id) closeDetail();
@@ -858,6 +963,7 @@
   }
 
   function openDetail(id) {
+    log("openDetail", { id });
     const habit = state.data.habits.find((item) => item.id === id);
     if (!habit) return;
     state.detailHabitId = id;
@@ -867,6 +973,7 @@
   }
 
   function closeDetail() {
+    log("closeDetail");
     state.detailHabitId = null;
     els.detail.classList.add("hidden");
   }
@@ -881,6 +988,11 @@
 
   function render(opts) {
     opts = opts || {};
+    log("render", {
+      pinToToday: Boolean(opts.pinToToday),
+      habits: state.data.habits.length,
+      creds: credSummary(state.creds),
+    });
     renderClock();
     renderScore();
     if (opts.pinToToday || opts.preserveScroll != null) renderGrid(opts);
@@ -901,6 +1013,7 @@
   }
 
   function openSetup() {
+    log("openSetup", credSummary(state.creds));
     els.apiKey.value = (state.creds && state.creds.apiKey) || "";
     els.binId.value = (state.creds && state.creds.binId) || "";
     els.setupError.classList.add("hidden");
@@ -911,12 +1024,15 @@
   }
 
   function closeSetup() {
+    log("closeSetup");
     els.setup.classList.add("hidden");
   }
 
   async function connect() {
+    log("connect clicked");
     const apiKey = els.apiKey.value.trim();
     const binId = els.binId.value.trim();
+    log("connect values", { key: redactKey(apiKey), binId: cleanBinId(binId) || "(empty)" });
     els.setupError.classList.add("hidden");
     if (!apiKey) {
       els.setupError.textContent = "API key is required.";
@@ -945,6 +1061,7 @@
       closeSetup();
       render({ pinToToday: true });
     } catch (err) {
+      logError("connect failed", err);
       els.setupError.textContent = err.message || "Could not connect.";
       els.setupError.classList.remove("hidden");
       setSync("err", "link failed");
@@ -955,38 +1072,48 @@
   }
 
   async function boot() {
+    log("boot start", credSummary(state.creds));
     state.data = loadCache();
     ensureTimelineSpan();
     render({ pinToToday: true });
 
     if (!state.creds || !state.creds.apiKey) {
+      log("boot: no API key, opening setup");
       openSetup();
       setSync("local", "local cache");
       return;
     }
 
     if (!state.creds.binId) {
+      log("boot: no bin id, opening setup");
       openSetup();
       setSync("local", "local cache");
       return;
     }
 
+    log("boot: fetching jsonbin");
     setSync("busy", "loading…");
     try {
       const remote = await readRemote();
       if (remote && Array.isArray(remote.habits) && remote.checks) {
+        log("boot: applying remote data");
         state.data = remote;
         forgetScores();
         writeCache();
+      } else {
+        logWarn("boot: remote payload missing habits/checks", remote);
       }
       setSync("ok", "synced // jsonbin");
       render({ pinToToday: true });
+      log("boot complete");
     } catch (err) {
+      logError("boot remote failed, using cache", err);
       setSync("err", err.message || "offline cache");
     }
   }
 
   els.grid.addEventListener("click", (event) => {
+    log("grid click", { target: event.target && event.target.className });
     const del = event.target.closest("[data-delete]");
     if (del) {
       const habit = state.data.habits.find((item) => item.id === del.dataset.delete);
@@ -1004,6 +1131,7 @@
   });
 
   els.addForm.addEventListener("submit", (event) => {
+    log("add form submit");
     event.preventDefault();
     addHabit(els.habitName.value);
     els.habitName.value = "";
@@ -1030,6 +1158,7 @@
   });
 
   document.getElementById("jump-older").addEventListener("click", () => {
+    log("jump older");
     if (els.gridWrap.scrollLeft < CELL_W * 40) {
       state.timelineStart = addDays(state.timelineStart, -SCROLL_EXTEND);
       renderGrid({ preserveScroll: els.gridWrap.scrollLeft + SCROLL_EXTEND * CELL_W - 30 * CELL_W });
@@ -1039,10 +1168,12 @@
   });
 
   document.getElementById("jump-newer").addEventListener("click", () => {
+    log("jump newer");
     els.gridWrap.scrollLeft += 30 * CELL_W;
   });
 
   document.getElementById("jump-today").addEventListener("click", () => {
+    log("jump today");
     renderGrid({ pinToToday: true });
   });
 
@@ -1077,6 +1208,14 @@
     else if (!els.setup.classList.contains("hidden")) closeSetup();
   });
 
+  window.addEventListener("error", (event) => {
+    logError("window error", event.error || event.message);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    logError("unhandled promise rejection", event.reason);
+  });
+
   setInterval(renderClock, 60000);
+  log("calling boot()");
   boot();
 })();
