@@ -12,6 +12,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 function runBuild(overrides) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pulse-build-"));
   fs.copyFileSync(path.join(root, "build-config.js"), path.join(dir, "build-config.js"));
+  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ type: "module" }));
   const result = spawnSync(process.execPath, ["build-config.js"], {
     cwd: dir,
     encoding: "utf8",
