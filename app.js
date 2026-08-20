@@ -120,17 +120,37 @@
     return (date.getDay() + 6) % 7;
   }
 
+  function envCreds() {
+    const cfg = window.PULSE_CONFIG || {};
+    const apiKey = String(cfg.apiKey || "").trim();
+    const binId = String(cfg.binId || "").trim();
+    if (!apiKey) return null;
+    return { apiKey, binId, fromEnv: true };
+  }
+
   function loadCreds() {
+    let local = null;
     try {
-      return JSON.parse(localStorage.getItem(CREDS_KEY) || "null");
+      local = JSON.parse(localStorage.getItem(CREDS_KEY) || "null");
     } catch {
-      return null;
+      local = null;
     }
+    const env = envCreds();
+    if (env) {
+      return {
+        apiKey: env.apiKey,
+        binId: env.binId || (local && local.binId) || "",
+        fromEnv: true,
+      };
+    }
+    return local;
   }
 
   function saveCreds(creds) {
-    state.creds = creds;
-    if (creds) localStorage.setItem(CREDS_KEY, JSON.stringify(creds));
+    const fromEnv = Boolean(state.creds && state.creds.fromEnv) || Boolean(creds && creds.fromEnv);
+    state.creds = Object.assign({}, creds, { fromEnv });
+    if (fromEnv) return;
+    if (creds) localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey: creds.apiKey, binId: creds.binId }));
     else localStorage.removeItem(CREDS_KEY);
   }
 
@@ -817,6 +837,8 @@
     els.apiKey.value = (state.creds && state.creds.apiKey) || "";
     els.binId.value = (state.creds && state.creds.binId) || "";
     els.setupError.classList.add("hidden");
+    const envNote = document.getElementById("setup-env-note");
+    if (envNote) envNote.classList.toggle("hidden", !(state.creds && state.creds.fromEnv));
     els.setup.classList.remove("hidden");
     els.apiKey.focus();
   }

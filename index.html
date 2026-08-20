@@ -41,7 +41,8 @@
           <button id="connect-btn" class="btn primary" type="button">Establish link</button>
           <button id="setup-dismiss" class="btn ghost" type="button">Continue locally</button>
         </div>
-        <p class="fine-print">The key stays in this browser only and is sent to jsonbin.io. Local mode still works; sync when you connect.</p>
+        <p id="setup-env-note" class="fine-print hidden">JSONBin is already set from environment variables on this deploy.</p>
+        <p class="fine-print">On Render, set JSONBIN_API_KEY and JSONBIN_BIN_ID. Locally, the key stays in this browser and is sent only to jsonbin.io.</p>
       </div>
     </div>
 
@@ -177,6 +178,10 @@
       </div>
     </div>
 
+    <script>
+      window.PULSE_CONFIG = window.PULSE_CONFIG || { apiKey: "", binId: "" };
+    </script>
+    <script src="config.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

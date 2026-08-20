@@ -1,6 +1,11 @@
 services:
   - type: web
-    name: pulse-habit-tracker
+    name: my-habits
     runtime: static
-    buildCommand: echo "static site"
+    buildCommand: node build-config.js
     staticPublishPath: .
+    envVars:
+      - key: JSONBIN_API_KEY
+        sync: false
+      - key: JSONBIN_BIN_ID
+        sync: false

@@ -4,3 +4,5 @@ Thumbs.db
 .idea/
 .vscode/
 node_modules/
+.env
+config.js

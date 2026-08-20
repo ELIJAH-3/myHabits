@@ -12,22 +12,29 @@ npx --yes serve .
 
 ## JSONBin setup
 
-1. Create a free account at [jsonbin.io](https://jsonbin.io).
-2. Copy your API key from [API Keys](https://jsonbin.io/api-keys).
-3. Open the app, paste the key, leave **Bin ID** blank, and click **Establish link**.
-4. A private bin is created and saved in this browser (`localStorage`).
+Create a free account at [jsonbin.io](https://jsonbin.io) and copy your API key from [API Keys](https://jsonbin.io/api-keys). Create a private bin (or leave Bin ID blank in the local app to create one).
 
-The API key never leaves the browser except as `X-Master-Key` / `X-Access-Key` to `https://api.jsonbin.io`.
+### Local
 
-## Deploy on Render
+Open the app and paste the API key and Bin ID, or generate `config.js`:
 
-1. Push this repo to GitHub / GitLab / Bitbucket.
-2. In Render: **New → Static Site**.
-3. Build command: leave empty (or `echo "static site"`).
-4. Publish directory: `.`
-5. Deploy, then connect JSONBin from the live site (per-browser).
+```bash
+JSONBIN_API_KEY=your_key JSONBIN_BIN_ID=your_bin_id node build-config.js
+```
 
-You can also apply `render.yaml` as a Render Blueprint.
+### Render (build-time environment variables)
+
+Static sites only see env vars during the **build**. `node build-config.js` writes them into `config.js`.
+
+1. Render Dashboard → your static site → **Environment**.
+2. Add:
+   - `JSONBIN_API_KEY` — JSONBin master key (or access key)
+   - `JSONBIN_BIN_ID` — the bin id
+3. Save with **Save, rebuild, and deploy**.
+4. Build command: `node build-config.js`
+5. Publish directory: `.`
+
+`config.js` is generated at build time and is not committed. Anyone who can view the live site can also read that file, so treat this as a personal app.
 
 ## Tracking
 
