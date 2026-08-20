@@ -1,4 +1,4 @@
-import { CELL_W } from "./constants.js";
+import { CELL_W, VERSION } from "./constants.js";
 import { addDays, toISODate, today } from "./dates.js";
 import { credSummary, log, logError, logWarn } from "./log.js";
 import {
@@ -33,9 +33,11 @@ import {
   setSync,
 } from "./ui.js";
 
-log("app modules loaded", { href: location.href, readyState: document.readyState });
+log("app modules loaded", { href: location.href, readyState: document.readyState, version: VERSION });
 
 const els = bindElements();
+const versionEl = document.getElementById("app-version");
+if (versionEl) versionEl.textContent = `v${VERSION}`;
 
 const state = {
   timelineStart: addDays(today(), -89),

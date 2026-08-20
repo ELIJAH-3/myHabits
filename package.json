@@ -1,5 +1,6 @@
 {
   "name": "pulse-habit-tracker",
+  "version": "1.10",
   "private": true,
   "type": "module",
   "scripts": {

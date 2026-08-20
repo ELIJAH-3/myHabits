@@ -1,3 +1,4 @@
+export const VERSION = "1.10";
 export const API = "https://api.jsonbin.io/v3";
 export const CREDS_KEY = "pulse.creds";
 export const CACHE_KEY = "pulse.cache";
