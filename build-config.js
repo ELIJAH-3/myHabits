@@ -37,5 +37,7 @@ console.log(
   `Wrote config.js keyType=${keyType} keyLength=${apiKey.length} keyPrefix=${prefix || "(empty)"} binLength=${binId.length}`
 );
 if (apiKey && !apiKey.startsWith("$2")) {
-  console.log("Warning: JSONBin keys usually start with $2a$ or $2b$. If yours does not, quotes or $ may have been stripped in Render.");
+  console.log(
+    "Warning: JSONBin keys usually start with $2a$ or $2b$. If yours does not, quotes or $ may have been stripped in Render."
+  );
 }
