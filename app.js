@@ -679,16 +679,16 @@
         ${yTicks
           .map(
             (tick) => `
-          <line x1="${l}" x2="${w - r}" y1="${yAt(tick)}" y2="${yAt(tick)}" stroke="rgba(61,255,232,0.12)" />
-          <text x="${l - 8}" y="${yAt(tick) + 4}" text-anchor="end" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${tick}</text>`
+          <line x1="${l}" x2="${w - r}" y1="${yAt(tick)}" y2="${yAt(tick)}" stroke="rgba(196,181,253,0.16)" />
+          <text x="${l - 8}" y="${yAt(tick) + 4}" text-anchor="end" fill="#9a8fa3" font-size="11" font-family="Sora, sans-serif">${tick}</text>`
           )
           .join("")}
-        <path d="${area}" fill="rgba(61,255,232,0.12)"></path>
-        <path d="${line}" fill="none" stroke="#3dffe8" stroke-width="2.2"></path>
+        <path d="${area}" fill="rgba(255,122,69,0.14)"></path>
+        <path d="${line}" fill="none" stroke="#ff7a45" stroke-width="2.2"></path>
         ${xTicks
           .map((i) => {
             const label = formatShort(series[i].date);
-            return `<text x="${xAt(i)}" y="${h - 12}" text-anchor="middle" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${label}</text>`;
+            return `<text x="${xAt(i)}" y="${h - 12}" text-anchor="middle" fill="#9a8fa3" font-size="11" font-family="Sora, sans-serif">${label}</text>`;
           })
           .join("")}
       </svg>`;
@@ -761,14 +761,14 @@
         const bh = (item.value / maxVal) * ih;
         const y = t + ih - bh;
         return `
-          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, item.value ? 2 : 0)}" fill="#3dffe8" opacity="0.88"></rect>
-          <text x="${x + barW / 2}" y="${t + ih + 14}" text-anchor="middle" fill="#7d938d" font-size="10" font-family="Oxanium, sans-serif" transform="rotate(-48 ${x + barW / 2} ${t + ih + 14})">${item.label}</text>
-          <text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" fill="#e7f6f2" font-size="10" font-family="Oxanium, sans-serif">${item.value}</text>`;
+          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, item.value ? 2 : 0)}" fill="#ff7a45" opacity="0.92"></rect>
+          <text x="${x + barW / 2}" y="${t + ih + 14}" text-anchor="middle" fill="#9a8fa3" font-size="10" font-family="Sora, sans-serif" transform="rotate(-48 ${x + barW / 2} ${t + ih + 14})">${item.label}</text>
+          <text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" fill="#f7f1ea" font-size="10" font-family="Sora, sans-serif">${item.value}</text>`;
       })
       .join("");
     return `
       <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Ticks by ${unit}">
-        <line x1="${l}" x2="${w - r}" y1="${t + ih}" y2="${t + ih}" stroke="rgba(61,255,232,0.2)" />
+        <line x1="${l}" x2="${w - r}" y1="${t + ih}" y2="${t + ih}" stroke="rgba(196,181,253,0.22)" />
         ${bars}
       </svg>`;
   }
