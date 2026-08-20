@@ -36,8 +36,9 @@ import {
 log("app modules loaded", { href: location.href, readyState: document.readyState, version: VERSION });
 
 const els = bindElements();
-const versionEl = document.getElementById("app-version");
-if (versionEl) versionEl.textContent = `v${VERSION}`;
+for (const el of document.querySelectorAll("[data-app-version]")) {
+  el.textContent = `v${VERSION}`;
+}
 
 const state = {
   timelineStart: addDays(today(), -89),

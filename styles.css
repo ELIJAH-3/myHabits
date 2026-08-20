@@ -103,13 +103,17 @@ body {
 }
 
 .version {
-  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(228, 195, 106, 0.14);
+  color: var(--accent);
   font-family: var(--font-ui);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  color: var(--muted);
-  vertical-align: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .brand p {
@@ -652,6 +656,18 @@ body {
 .setup-card {
   width: min(460px, 100%);
   padding: 28px;
+}
+
+.setup-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.setup-kicker .kicker {
+  margin: 0;
 }
 
 .setup-card h1 {

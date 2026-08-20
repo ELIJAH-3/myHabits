@@ -71,7 +71,8 @@ test("the visible app version is 1.10 everywhere", () => {
   const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const constants = fs.readFileSync(path.join(root, "js/constants.js"), "utf8");
-  assert.match(html, /id="app-version"[^>]*>v1\.10</);
+  assert.match(html, /id="app-version"/);
+  assert.match(html, /data-app-version[^>]*>v1\.10</);
   assert.equal(pkg.version, "1.10");
   assert.match(constants, /export const VERSION = "1\.10"/);
 });
