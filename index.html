@@ -72,14 +72,14 @@
             <span>/100</span>
           </div>
         </div>
-        <p id="score-caption" class="score-caption">no habits yet</p>
+        <p id="score-caption" class="score-caption">100% = second nature</p>
         <dl class="stats">
           <div>
             <dt>today</dt>
             <dd id="stat-today">0/0</dd>
           </div>
           <div>
-            <dt>streak</dt>
+            <dt>best</dt>
             <dd id="stat-streak">0d</dd>
           </div>
           <div>
@@ -96,15 +96,13 @@
       <section class="hud-frame board">
         <div class="board-head">
           <div>
-            <p class="kicker">daily log</p>
-            <h2 id="range-label">this window</h2>
+            <p class="kicker">lifetime log</p>
+            <h2 id="range-label">scroll through days</h2>
           </div>
-          <div class="date-nav" role="group" aria-label="Date window">
-            <button id="shift-week-back" class="btn ghost tight" type="button" title="Back 7 days">«</button>
-            <button id="shift-day-back" class="btn ghost tight" type="button" title="Previous day">‹</button>
+          <div class="date-nav" role="group" aria-label="Timeline">
+            <button id="jump-older" class="btn ghost" type="button">« older</button>
             <button id="jump-today" class="btn ghost" type="button">today</button>
-            <button id="shift-day-fwd" class="btn ghost tight" type="button" title="Next day">›</button>
-            <button id="shift-week-fwd" class="btn ghost tight" type="button" title="Forward 7 days">»</button>
+            <button id="jump-newer" class="btn ghost" type="button">newer »</button>
           </div>
         </div>
 
@@ -122,8 +120,62 @@
 
     <footer class="foot">
       <span>frontend only · jsonbin.io</span>
-      <span>tick a cell to log the day</span>
+      <span>scroll days · click a habit for graphs</span>
     </footer>
+
+    <div id="habit-detail" class="detail hidden" role="dialog" aria-modal="true" aria-labelledby="detail-name">
+      <div class="detail-card hud-frame">
+        <div class="detail-head">
+          <div>
+            <p class="kicker">identity dossier</p>
+            <h2 id="detail-name">habit</h2>
+            <p id="detail-score-line" class="detail-score-line"></p>
+          </div>
+          <button id="detail-close" class="btn ghost" type="button">close</button>
+        </div>
+
+        <section class="detail-block">
+          <p class="kicker">identity over time</p>
+          <p class="chart-hint">Score % vs days. 100% means this habit is second nature.</p>
+          <div id="chart-score" class="chart"></div>
+        </section>
+
+        <section class="detail-block">
+          <div class="block-head">
+            <div>
+              <p class="kicker">ticks over time</p>
+              <p class="chart-hint">How many times this habit was logged in each period.</p>
+            </div>
+            <div id="freq-seg" class="seg" role="group" aria-label="Frequency grouping">
+              <button type="button" data-freq="week">week</button>
+              <button type="button" data-freq="month" class="on">month</button>
+              <button type="button" data-freq="year">year</button>
+            </div>
+          </div>
+          <div id="chart-freq" class="chart chart-scroll"></div>
+        </section>
+
+        <section class="detail-block">
+          <div class="block-head">
+            <div>
+              <p class="kicker">heatmap</p>
+              <p class="chart-hint">Every logged day, forever.</p>
+            </div>
+            <div class="date-nav">
+              <button id="heat-prev" class="btn ghost tight" type="button">«</button>
+              <span id="heat-year" class="year-label"></span>
+              <button id="heat-next" class="btn ghost tight" type="button">»</button>
+            </div>
+          </div>
+          <div id="heatmap" class="heatmap-wrap"></div>
+        </section>
+
+        <section class="detail-block">
+          <p class="kicker">best streaks</p>
+          <ul id="streak-list" class="streak-list"></ul>
+        </section>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>

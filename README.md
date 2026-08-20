@@ -29,6 +29,17 @@ The API key never leaves the browser except as `X-Master-Key` / `X-Access-Key` t
 
 You can also apply `render.yaml` as a Render Blueprint.
 
-## Score
+## Tracking
 
-Each habit is scored as completion rate over the last 30 days (from the day it was created). The overall habit score is the average of per-habit scores. Streak is consecutive checked days ending today (or yesterday if today is still open).
+The day grid is a lifetime log. Scroll horizontally (or use the mouse wheel over the grid, or **older** / **newer**) to move through history. The timeline grows as you scroll back. Click a habit name or its identity score to open graphs, a heatmap, and best streaks.
+
+## Identity score
+
+Each habit has an identity score from 0–100%. **100% means the habit is second nature** — it has had time to settle and you have been consistently logging it.
+
+The score combines:
+
+- **Consistency** — a recency-weighted record of logged vs missed days (recent weeks count more, but history is not discarded).
+- **Maturity** — a new habit cannot be 100% after a few days. The score approaches identity over months of practice.
+
+The ring on the left is the average identity score across all habits.

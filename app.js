@@ -1,13 +1,21 @@
 (() => {
-  const DAYS = 7;
-  const SCORE_WINDOW = 30;
   const API = "https://api.jsonbin.io/v3";
   const CREDS_KEY = "pulse.creds";
   const CACHE_KEY = "pulse.cache";
   const RING = 2 * Math.PI * 52;
 
+  const CELL_W = 40;
+  const NAME_W = 228;
+  const TAIL_W = 132;
+  const MIN_HISTORY = 90;
+  const SCROLL_EXTEND = 90;
+  const IDENTITY_HALF_LIFE = 21;
+  const IDENTITY_TAU = 45;
+  const IDENTITY_ALPHA = 1 - Math.pow(0.5, 1 / IDENTITY_HALF_LIFE);
+
   const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const HEAT_WD = ["m", "t", "w", "t", "f", "s", "s"];
 
   const els = {
     setup: document.getElementById("setup"),
@@ -27,18 +35,34 @@
     syncDot: document.getElementById("sync-dot"),
     syncLabel: document.getElementById("sync-label"),
     rangeLabel: document.getElementById("range-label"),
+    gridWrap: document.getElementById("grid-wrap"),
     grid: document.getElementById("habit-grid"),
     addForm: document.getElementById("add-form"),
     habitName: document.getElementById("habit-name"),
+    detail: document.getElementById("habit-detail"),
+    detailName: document.getElementById("detail-name"),
+    detailScore: document.getElementById("detail-score-line"),
+    chartScore: document.getElementById("chart-score"),
+    chartFreq: document.getElementById("chart-freq"),
+    heatmap: document.getElementById("heatmap"),
+    heatYear: document.getElementById("heat-year"),
+    streakList: document.getElementById("streak-list"),
+    freqSeg: document.getElementById("freq-seg"),
   };
 
   const state = {
-    endDate: startOfDay(new Date()),
+    timelineStart: addDays(startOfDay(new Date()), -(MIN_HISTORY - 1)),
     data: emptyData(),
     creds: loadCreds(),
     saveTimer: null,
     pushing: false,
     pendingPush: false,
+    ignoreScroll: false,
+    scoreMemo: new Map(),
+    visIndex: -1,
+    detailHabitId: null,
+    freqUnit: "month",
+    heatYear: new Date().getFullYear(),
   };
 
   function emptyData() {
@@ -71,14 +95,29 @@
     return startOfDay(new Date());
   }
 
+  function diffDays(a, b) {
+    const aa = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+    const bb = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+    return Math.round((bb - aa) / 86400000);
+  }
+
   function formatClock(date) {
     const wd = WEEKDAYS[date.getDay()];
     const mo = MONTHS[date.getMonth()];
     return `${wd} ${String(date.getDate()).padStart(2, "0")} ${mo} ${date.getFullYear()}`;
   }
 
-  function windowDays() {
-    return Array.from({ length: DAYS }, (_, i) => addDays(state.endDate, i - (DAYS - 1)));
+  function formatShort(date) {
+    return `${String(date.getDate()).padStart(2, "0")} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
+  function mondayOf(date) {
+    const dow = date.getDay();
+    return addDays(date, dow === 0 ? -6 : 1 - dow);
+  }
+
+  function weekdayMon0(date) {
+    return (date.getDay() + 6) % 7;
   }
 
   function loadCreds() {
@@ -202,30 +241,66 @@
     return Boolean(state.data.checks[habitId] && state.data.checks[habitId][iso]);
   }
 
+  function forgetScores() {
+    state.scoreMemo.clear();
+  }
+
   function toggleCheck(habitId, iso) {
     if (parseISODate(iso) > today()) return;
     const bag = state.data.checks[habitId] || (state.data.checks[habitId] = {});
     if (bag[iso]) delete bag[iso];
     else bag[iso] = true;
+    forgetScores();
     schedulePush();
     render();
   }
 
-  function eligibleDays(habit) {
-    const created = startOfDay(parseISODate(habit.createdAt));
-    const end = today();
-    const start = addDays(end, -(SCORE_WINDOW - 1));
-    const from = created > start ? created : start;
-    const days = [];
-    for (let d = from; d <= end; d = addDays(d, 1)) days.push(toISODate(d));
-    return days;
+  function habitStart(habit) {
+    let start = startOfDay(parseISODate(habit.createdAt));
+    const checks = state.data.checks[habit.id] || {};
+    for (const iso of Object.keys(checks)) {
+      const d = parseISODate(iso);
+      if (d < start) start = d;
+    }
+    return start;
+  }
+
+  function identitySeries(habit, until) {
+    const end = until || today();
+    const start = habitStart(habit);
+    const points = [];
+    if (start > end) return points;
+    let ema = null;
+    let i = 0;
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      i += 1;
+      const x = habitChecked(habit.id, toISODate(d)) ? 1 : 0;
+      ema = ema === null ? x : ema * (1 - IDENTITY_ALPHA) + x * IDENTITY_ALPHA;
+      const maturity = 1 - Math.exp(-i / IDENTITY_TAU);
+      points.push({
+        date: d,
+        iso: toISODate(d),
+        score: Math.max(0, Math.min(100, ema * maturity * 100)),
+      });
+    }
+    return points;
   }
 
   function habitScore(habit) {
-    const days = eligibleDays(habit);
-    if (!days.length) return 100;
-    const done = days.filter((iso) => habitChecked(habit.id, iso)).length;
-    return Math.round((done / days.length) * 100);
+    const cached = state.scoreMemo.get(habit.id);
+    if (cached != null) return cached;
+    const series = identitySeries(habit);
+    const score = series.length ? Math.round(series[series.length - 1].score) : 0;
+    state.scoreMemo.set(habit.id, score);
+    return score;
+  }
+
+  function identityCaption(score) {
+    if (score >= 100) return "second nature";
+    if (score >= 90) return "identity";
+    if (score >= 70) return "rooted";
+    if (score >= 40) return "forming";
+    return "spark";
   }
 
   function habitStreak(habit) {
@@ -239,6 +314,39 @@
     return streak;
   }
 
+  function allStreaks(habit) {
+    const start = habitStart(habit);
+    const end = today();
+    const streaks = [];
+    let run = null;
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      if (habitChecked(habit.id, toISODate(d))) {
+        if (!run) run = { start: d, end: d, length: 1 };
+        else {
+          run.end = d;
+          run.length += 1;
+        }
+      } else if (run) {
+        streaks.push(run);
+        run = null;
+      }
+    }
+    if (run) streaks.push(run);
+    const currentLen = habitStreak(habit);
+    const liveEnd = habitChecked(habit.id, toISODate(today())) ? today() : addDays(today(), -1);
+    return streaks
+      .map((item) => {
+        const isLive = currentLen > 0 && item.length === currentLen && diffDays(item.end, liveEnd) === 0;
+        return Object.assign({ live: isLive }, item);
+      })
+      .sort((a, b) => b.length - a.length || b.end - a.end);
+  }
+
+  function longestStreak(habit) {
+    const streaks = allStreaks(habit);
+    return streaks.length ? streaks[0].length : 0;
+  }
+
   function overallScore() {
     const { habits } = state.data;
     if (!habits.length) return 0;
@@ -246,8 +354,8 @@
     return Math.round(total / habits.length);
   }
 
-  function bestStreak() {
-    return state.data.habits.reduce((max, habit) => Math.max(max, habitStreak(habit)), 0);
+  function bestStreakAll() {
+    return state.data.habits.reduce((max, habit) => Math.max(max, longestStreak(habit)), 0);
   }
 
   function todayCounts() {
@@ -255,6 +363,30 @@
     const total = state.data.habits.length;
     const done = state.data.habits.filter((habit) => habitChecked(habit.id, iso)).length;
     return { done, total };
+  }
+
+  function dataEarliest() {
+    let min = today();
+    for (const habit of state.data.habits) {
+      const start = habitStart(habit);
+      if (start < min) min = start;
+    }
+    return min;
+  }
+
+  function timelineDayCount() {
+    return diffDays(state.timelineStart, today()) + 1;
+  }
+
+  function dateAtIndex(index) {
+    return addDays(state.timelineStart, index);
+  }
+
+  function ensureTimelineSpan() {
+    const floor = addDays(today(), -(MIN_HISTORY - 1));
+    const earliest = dataEarliest();
+    const need = earliest < floor ? earliest : floor;
+    if (need < state.timelineStart) state.timelineStart = need;
   }
 
   function addHabit(name) {
@@ -265,13 +397,17 @@
       name: trimmed,
       createdAt: toISODate(today()),
     });
+    const first = state.data.habits.length === 1;
+    forgetScores();
     schedulePush();
-    render();
+    render(first ? { pinToToday: true } : {});
   }
 
   function removeHabit(id) {
     state.data.habits = state.data.habits.filter((habit) => habit.id !== id);
     delete state.data.checks[id];
+    if (state.detailHabitId === id) closeDetail();
+    forgetScores();
     schedulePush();
     render();
   }
@@ -289,34 +425,72 @@
     els.ring.style.strokeDashoffset = String(RING * (1 - score / 100));
     const { done, total } = todayCounts();
     els.statToday.textContent = `${done}/${total}`;
-    els.statStreak.textContent = `${bestStreak()}d`;
+    els.statStreak.textContent = `${bestStreakAll()}d`;
     els.statCount.textContent = String(total);
-    if (!total) els.scoreCaption.textContent = "no habits yet";
-    else if (done === total) els.scoreCaption.textContent = "all protocols complete";
-    else els.scoreCaption.textContent = `${total - done} remaining today`;
+    if (!total) els.scoreCaption.textContent = "100% = second nature";
+    else if (score >= 100) els.scoreCaption.textContent = "identity locked";
+    else els.scoreCaption.textContent = `${total - done} remaining today · 100% = second nature`;
   }
 
-  function renderGrid() {
-    const days = windowDays();
+  function visibleRange(scrollLeft, pinToToday) {
+    const total = timelineDayCount();
+    const inner = els.gridWrap.clientWidth || 800;
+    const daysWidth = Math.max(160, inner - NAME_W - TAIL_W);
+    const vis = Math.ceil(daysWidth / CELL_W) + 10;
+    let start;
+    if (pinToToday) start = Math.max(0, total - vis);
+    else start = Math.max(0, Math.floor((scrollLeft || 0) / CELL_W) - 5);
+    let count = vis;
+    if (start + count > total) count = Math.max(0, total - start);
+    return { start, count, total };
+  }
+
+  function dayHeadHtml(date, nowIso) {
+    const iso = toISODate(date);
+    const isToday = iso === nowIso;
+    const month = date.getDate() === 1 ? MONTHS[date.getMonth()] : "";
+    return `
+      <div class="day-slot day-head ${isToday ? "today" : ""}">
+        <span class="day-month">${month}</span>
+        <span class="day-num">${date.getDate()}</span>
+        <span>${WEEKDAYS[date.getDay()].slice(0, 2)}</span>
+      </div>`;
+  }
+
+  function renderGrid(opts) {
+    opts = opts || {};
+    ensureTimelineSpan();
     const now = today();
-    els.rangeLabel.textContent = `${formatClock(days[0])}  →  ${formatClock(days[DAYS - 1])}`;
+    const nowIso = toISODate(now);
+    const pin = Boolean(opts.pinToToday);
+    const scrollHint = pin ? 0 : opts.preserveScroll != null ? opts.preserveScroll : els.gridWrap.scrollLeft;
+    const { start, count, total } = visibleRange(scrollHint, pin);
+    state.visIndex = start;
+
+    els.grid.style.setProperty("--name-w", `${NAME_W}px`);
+    els.grid.style.setProperty("--tail-w", `${TAIL_W}px`);
+    els.grid.style.setProperty("--cell-w", `${CELL_W}px`);
+    els.grid.style.setProperty("--days-w", `${total * CELL_W}px`);
 
     if (!state.data.habits.length) {
       els.grid.innerHTML = `
         <div class="empty">
           <strong>no protocols initialized</strong>
-          add a habit below, then tick the date cells
+          add a habit, then scroll the lifetime log
         </div>`;
+      els.rangeLabel.textContent = "scroll through days";
       return;
     }
 
-    const head = days
-      .map((date) => {
-        const iso = toISODate(date);
-        const isToday = iso === toISODate(now);
-        return `<div class="day-head ${isToday ? "today" : ""}">${WEEKDAYS[date.getDay()]}<span>${date.getDate()}</span></div>`;
-      })
-      .join("");
+    const leftPad = start * CELL_W;
+    const rightPad = Math.max(0, (total - start - count) * CELL_W);
+    const days = Array.from({ length: count }, (_, i) => dateAtIndex(start + i));
+    const first = days[0];
+    const last = days[days.length - 1];
+    els.rangeLabel.textContent = first && last ? `${formatShort(first)}  →  ${formatShort(last)}` : "lifetime";
+
+    const pad = (width) => (width ? `<div style="flex:0 0 ${width}px;width:${width}px"></div>` : "");
+    const heads = `${pad(leftPad)}${days.map((date) => dayHeadHtml(date, nowIso)).join("")}${pad(rightPad)}`;
 
     const rows = state.data.habits
       .map((habit, index) => {
@@ -325,9 +499,9 @@
             const iso = toISODate(date);
             const future = date > now;
             const on = habitChecked(habit.id, iso);
-            const isToday = iso === toISODate(now);
+            const isToday = iso === nowIso;
             return `
-              <div class="${isToday ? "col-today" : ""}">
+              <div class="day-slot ${isToday ? "today" : ""}">
                 <button
                   class="check ${on ? "on" : ""}"
                   type="button"
@@ -342,28 +516,272 @@
           })
           .join("");
         const score = habitScore(habit);
-        const streak = habitStreak(habit);
+        const caption = identityCaption(score);
         return `
           <div class="habit-row">
-            <div class="habit-name">
-              <span class="habit-index">${String(index + 1).padStart(2, "0")}</span>
-              <strong>${escapeHtml(habit.name)}</strong>
+            <div class="col-name">
+              <button class="habit-link" type="button" data-open="${habit.id}" aria-haspopup="dialog">
+                <span class="habit-index">${String(index + 1).padStart(2, "0")}</span>
+                <strong>${escapeHtml(habit.name)}</strong>
+              </button>
             </div>
-            ${cells}
-            <div class="score-chip">${score}<small>${streak}d streak</small></div>
-            <button class="icon-btn" type="button" data-delete="${habit.id}" aria-label="Remove ${escapeHtml(habit.name)}">×</button>
+            <div class="col-days">${pad(leftPad)}${cells}${pad(rightPad)}</div>
+            <div class="col-tail">
+              <button class="score-chip ${score >= 100 ? "max" : ""}" type="button" data-open="${habit.id}" title="Identity score. 100% means this habit is second nature.">
+                ${score}%<small>${caption}</small>
+              </button>
+              <button class="icon-btn" type="button" data-delete="${habit.id}" aria-label="Remove ${escapeHtml(habit.name)}">×</button>
+            </div>
           </div>`;
       })
       .join("");
 
     els.grid.innerHTML = `
       <div class="grid-header">
-        <div>habit</div>
-        ${head}
-        <div style="text-align:right">score</div>
-        <div></div>
+        <div class="col-name">habit</div>
+        <div class="col-days">${heads}</div>
+        <div class="col-tail">identity</div>
       </div>
       ${rows}`;
+
+    applyScroll(opts);
+  }
+
+  function applyScroll(opts) {
+    const wrap = els.gridWrap;
+    state.ignoreScroll = true;
+    const apply = () => {
+      if (opts.pinToToday) wrap.scrollLeft = wrap.scrollWidth;
+      else if (opts.preserveScroll != null) wrap.scrollLeft = opts.preserveScroll;
+      state.ignoreScroll = false;
+    };
+    apply();
+    requestAnimationFrame(apply);
+  }
+
+  function downsample(points, max) {
+    if (points.length <= max) return points;
+    const step = (points.length - 1) / (max - 1);
+    return Array.from({ length: max }, (_, i) => points[Math.round(i * step)]);
+  }
+
+  function lineChart(points) {
+    if (!points.length) return `<p class="chart-hint">No history yet.</p>`;
+    const series = downsample(points, 420);
+    const w = 840;
+    const h = 260;
+    const l = 44;
+    const r = 16;
+    const t = 18;
+    const b = 40;
+    const iw = w - l - r;
+    const ih = h - t - b;
+    const n = series.length;
+    const xAt = (i) => (n === 1 ? l + iw / 2 : l + (i / (n - 1)) * iw);
+    const yAt = (v) => t + (1 - v / 100) * ih;
+    const line = series
+      .map((p, i) => `${i ? "L" : "M"}${xAt(i).toFixed(1)},${yAt(p.score).toFixed(1)}`)
+      .join(" ");
+    const area = `${line} L${xAt(n - 1).toFixed(1)},${(t + ih).toFixed(1)} L${xAt(0).toFixed(1)},${(t + ih).toFixed(1)} Z`;
+    const yTicks = [0, 25, 50, 75, 100];
+    const xTicks = [0, Math.floor((n - 1) / 3), Math.floor(((n - 1) * 2) / 3), n - 1].filter(
+      (v, i, arr) => arr.indexOf(v) === i
+    );
+    return `
+      <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Identity score over days">
+        ${yTicks
+          .map(
+            (tick) => `
+          <line x1="${l}" x2="${w - r}" y1="${yAt(tick)}" y2="${yAt(tick)}" stroke="rgba(61,255,232,0.12)" />
+          <text x="${l - 8}" y="${yAt(tick) + 4}" text-anchor="end" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${tick}</text>`
+          )
+          .join("")}
+        <path d="${area}" fill="rgba(61,255,232,0.12)"></path>
+        <path d="${line}" fill="none" stroke="#3dffe8" stroke-width="2.2"></path>
+        ${xTicks
+          .map((i) => {
+            const label = formatShort(series[i].date);
+            return `<text x="${xAt(i)}" y="${h - 12}" text-anchor="middle" fill="#7d938d" font-size="11" font-family="Oxanium, sans-serif">${label}</text>`;
+          })
+          .join("")}
+      </svg>`;
+  }
+
+  function freqBuckets(habit, unit) {
+    const start = habitStart(habit);
+    const end = today();
+    const keys = [];
+    const counts = new Map();
+
+    function keyFor(date) {
+      if (unit === "year") return String(date.getFullYear());
+      if (unit === "month") return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      return toISODate(mondayOf(date));
+    }
+
+    function labelFor(key) {
+      if (unit === "year") return key;
+      if (unit === "month") {
+        const [y, m] = key.split("-");
+        return `${MONTHS[Number(m) - 1]} ${y}`;
+      }
+      return formatShort(parseISODate(key));
+    }
+
+    function step(date) {
+      if (unit === "year") return new Date(date.getFullYear() + 1, 0, 1);
+      if (unit === "month") return new Date(date.getFullYear(), date.getMonth() + 1, 1);
+      return addDays(date, 7);
+    }
+
+    function firstBucket(date) {
+      if (unit === "year") return new Date(date.getFullYear(), 0, 1);
+      if (unit === "month") return new Date(date.getFullYear(), date.getMonth(), 1);
+      return mondayOf(date);
+    }
+
+    for (let cursor = firstBucket(start); cursor <= end; cursor = step(cursor)) {
+      const key = keyFor(cursor);
+      keys.push(key);
+      counts.set(key, 0);
+    }
+
+    for (let d = start; d <= end; d = addDays(d, 1)) {
+      if (!habitChecked(habit.id, toISODate(d))) continue;
+      const key = keyFor(d);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    return keys.map((key) => ({ key, label: labelFor(key), value: counts.get(key) || 0 }));
+  }
+
+  function barChart(buckets, unit) {
+    if (!buckets.length) return `<p class="chart-hint">No ticks yet.</p>`;
+    const maxVal = Math.max(unit === "week" ? 7 : unit === "month" ? 31 : 366, ...buckets.map((b) => b.value), 1);
+    const barW = 28;
+    const gap = 10;
+    const l = 36;
+    const r = 12;
+    const t = 16;
+    const b = 64;
+    const h = 250;
+    const iw = Math.max(480, buckets.length * (barW + gap));
+    const w = l + iw + r;
+    const ih = h - t - b;
+    const bars = buckets
+      .map((item, i) => {
+        const x = l + i * (barW + gap);
+        const bh = (item.value / maxVal) * ih;
+        const y = t + ih - bh;
+        return `
+          <rect x="${x}" y="${y}" width="${barW}" height="${Math.max(bh, item.value ? 2 : 0)}" fill="#3dffe8" opacity="0.88"></rect>
+          <text x="${x + barW / 2}" y="${t + ih + 14}" text-anchor="middle" fill="#7d938d" font-size="10" font-family="Oxanium, sans-serif" transform="rotate(-48 ${x + barW / 2} ${t + ih + 14})">${item.label}</text>
+          <text x="${x + barW / 2}" y="${y - 4}" text-anchor="middle" fill="#e7f6f2" font-size="10" font-family="Oxanium, sans-serif">${item.value}</text>`;
+      })
+      .join("");
+    return `
+      <svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="Ticks by ${unit}">
+        <line x1="${l}" x2="${w - r}" y1="${t + ih}" y2="${t + ih}" stroke="rgba(61,255,232,0.2)" />
+        ${bars}
+      </svg>`;
+  }
+
+  function heatmapHtml(habit, year) {
+    const start = new Date(year, 0, 1);
+    const end = new Date(year, 11, 31);
+    const created = habitStart(habit);
+    const now = today();
+    const origin = mondayOf(start);
+    const weeks = [];
+    for (let cursor = origin; cursor <= end; cursor = addDays(cursor, 7)) weeks.push(cursor);
+
+    const cols = weeks
+      .map((weekStart) => {
+        let label = "";
+        for (let i = 0; i < 7; i++) {
+          const d = addDays(weekStart, i);
+          if (d.getFullYear() === year && d.getDate() === 1) label = MONTHS[d.getMonth()];
+        }
+        const cells = Array.from({ length: 7 }, (_, i) => {
+          const d = addDays(weekStart, i);
+          const iso = toISODate(d);
+          if (d.getFullYear() !== year || d > now) return `<div class="heat-cell" title="${iso}"></div>`;
+          if (d < created) return `<div class="heat-cell" title="${iso}"></div>`;
+          const on = habitChecked(habit.id, iso);
+          return `<div class="heat-cell ${on ? "on" : "miss"}" title="${iso} · ${on ? "logged" : "missed"}"></div>`;
+        }).join("");
+        return `<div class="heat-col"><div class="heat-month">${label}</div>${cells}</div>`;
+      })
+      .join("");
+
+    const wd = HEAT_WD.map((letter, i) => `<span>${i % 2 === 0 && i < 6 ? letter : ""}</span>`).join("");
+    return `
+      <div class="heat-layout">
+        <div class="heat-wd">${wd}</div>
+        <div class="heat">${cols}</div>
+      </div>
+      <div class="heat-legend">
+        <span>missed</span><span class="heat-cell miss"></span>
+        <span>logged</span><span class="heat-cell on"></span>
+      </div>`;
+  }
+
+  function renderDetail() {
+    if (!state.detailHabitId) return;
+    const habit = state.data.habits.find((item) => item.id === state.detailHabitId);
+    if (!habit) {
+      closeDetail();
+      return;
+    }
+    const score = habitScore(habit);
+    const current = habitStreak(habit);
+    const best = longestStreak(habit);
+    els.detailName.textContent = habit.name;
+    els.detailScore.innerHTML = `<strong>${score}%</strong> ${identityCaption(score)} · current ${current}d · best ${best}d`;
+
+    const series = identitySeries(habit);
+    els.chartScore.innerHTML = lineChart(series);
+    els.chartFreq.innerHTML = barChart(freqBuckets(habit, state.freqUnit), state.freqUnit);
+
+    const minYear = habitStart(habit).getFullYear();
+    const maxYear = today().getFullYear();
+    if (state.heatYear < minYear) state.heatYear = minYear;
+    if (state.heatYear > maxYear) state.heatYear = maxYear;
+    els.heatYear.textContent = String(state.heatYear);
+    els.heatmap.innerHTML = heatmapHtml(habit, state.heatYear);
+
+    const streaks = allStreaks(habit).slice(0, 8);
+    if (!streaks.length) {
+      els.streakList.innerHTML = `<li><span class="streak-range">No streaks yet. Tick consecutive days to start one.</span></li>`;
+    } else {
+      els.streakList.innerHTML = streaks
+        .map(
+          (item, index) => `
+          <li class="${item.live ? "live" : ""}">
+            <span class="streak-len">${item.length}d ${index === 0 ? "best" : ""} ${item.live ? "live" : ""}</span>
+            <span class="streak-range">${formatShort(item.start)} → ${formatShort(item.end)}</span>
+          </li>`
+        )
+        .join("");
+    }
+
+    for (const btn of els.freqSeg.querySelectorAll("button")) {
+      btn.classList.toggle("on", btn.dataset.freq === state.freqUnit);
+    }
+  }
+
+  function openDetail(id) {
+    const habit = state.data.habits.find((item) => item.id === id);
+    if (!habit) return;
+    state.detailHabitId = id;
+    state.heatYear = today().getFullYear();
+    els.detail.classList.remove("hidden");
+    renderDetail();
+  }
+
+  function closeDetail() {
+    state.detailHabitId = null;
+    els.detail.classList.add("hidden");
   }
 
   function escapeHtml(value) {
@@ -374,20 +792,25 @@
       .replaceAll('"', "&quot;");
   }
 
-  function render() {
+  function render(opts) {
+    opts = opts || {};
     renderClock();
     renderScore();
-    renderGrid();
+    if (opts.pinToToday || opts.preserveScroll != null) renderGrid(opts);
+    else renderGrid({ preserveScroll: els.gridWrap.scrollLeft });
+    if (state.detailHabitId) renderDetail();
     if (state.creds && state.creds.binId && els.syncLabel.textContent === "local cache") {
       setSync("ok", "synced // jsonbin");
     }
   }
 
-  function shiftWindow(days) {
-    const next = addDays(state.endDate, days);
-    const max = today();
-    state.endDate = next > max ? max : next;
-    render();
+  function extendTimelineIfNeeded() {
+    if (state.ignoreScroll) return false;
+    if (els.gridWrap.scrollLeft >= CELL_W * 12) return false;
+    const added = SCROLL_EXTEND;
+    state.timelineStart = addDays(state.timelineStart, -added);
+    renderGrid({ preserveScroll: els.gridWrap.scrollLeft + added * CELL_W });
+    return true;
   }
 
   function openSetup() {
@@ -423,6 +846,7 @@
         const remote = await readRemote();
         if (remote && Array.isArray(remote.habits) && remote.checks) {
           state.data = remote;
+          forgetScores();
           writeCache();
         } else {
           await updateRemote(state.data);
@@ -430,7 +854,7 @@
       }
       setSync("ok", "synced // jsonbin");
       closeSetup();
-      render();
+      render({ pinToToday: true });
     } catch (err) {
       els.setupError.textContent = err.message || "Could not connect.";
       els.setupError.classList.remove("hidden");
@@ -443,7 +867,8 @@
 
   async function boot() {
     state.data = loadCache();
-    render();
+    ensureTimelineSpan();
+    render({ pinToToday: true });
 
     if (!state.creds || !state.creds.apiKey) {
       openSetup();
@@ -462,10 +887,11 @@
       const remote = await readRemote();
       if (remote && Array.isArray(remote.habits) && remote.checks) {
         state.data = remote;
+        forgetScores();
         writeCache();
       }
       setSync("ok", "synced // jsonbin");
-      render();
+      render({ pinToToday: true });
     } catch (err) {
       setSync("err", err.message || "offline cache");
     }
@@ -479,6 +905,11 @@
       if (confirm(`Remove “${label}” and its history?`)) removeHabit(del.dataset.delete);
       return;
     }
+    const open = event.target.closest("[data-open]");
+    if (open) {
+      openDetail(open.dataset.open);
+      return;
+    }
     const check = event.target.closest(".check");
     if (check && !check.disabled) toggleCheck(check.dataset.habit, check.dataset.date);
   });
@@ -490,18 +921,72 @@
     els.habitName.focus();
   });
 
-  document.getElementById("shift-day-back").addEventListener("click", () => shiftWindow(-1));
-  document.getElementById("shift-day-fwd").addEventListener("click", () => shiftWindow(1));
-  document.getElementById("shift-week-back").addEventListener("click", () => shiftWindow(-7));
-  document.getElementById("shift-week-fwd").addEventListener("click", () => shiftWindow(7));
+  els.gridWrap.addEventListener(
+    "wheel",
+    (event) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      els.gridWrap.scrollLeft += event.deltaY;
+    },
+    { passive: false }
+  );
+
+  els.gridWrap.addEventListener("scroll", () => {
+    if (state.ignoreScroll) return;
+    if (extendTimelineIfNeeded()) return;
+    const idx = Math.floor(els.gridWrap.scrollLeft / CELL_W);
+    if (Math.abs(idx - state.visIndex) >= 4) {
+      renderGrid({ preserveScroll: els.gridWrap.scrollLeft });
+    }
+  });
+
+  document.getElementById("jump-older").addEventListener("click", () => {
+    if (els.gridWrap.scrollLeft < CELL_W * 40) {
+      state.timelineStart = addDays(state.timelineStart, -SCROLL_EXTEND);
+      renderGrid({ preserveScroll: els.gridWrap.scrollLeft + SCROLL_EXTEND * CELL_W - 30 * CELL_W });
+      return;
+    }
+    els.gridWrap.scrollLeft -= 30 * CELL_W;
+  });
+
+  document.getElementById("jump-newer").addEventListener("click", () => {
+    els.gridWrap.scrollLeft += 30 * CELL_W;
+  });
+
   document.getElementById("jump-today").addEventListener("click", () => {
-    state.endDate = today();
-    render();
+    renderGrid({ pinToToday: true });
   });
 
   els.settingsBtn.addEventListener("click", openSetup);
   els.setupDismiss.addEventListener("click", closeSetup);
   els.connectBtn.addEventListener("click", connect);
+  document.getElementById("detail-close").addEventListener("click", closeDetail);
+  els.detail.addEventListener("click", (event) => {
+    if (event.target === els.detail) closeDetail();
+  });
+
+  els.freqSeg.addEventListener("click", (event) => {
+    const btn = event.target.closest("[data-freq]");
+    if (!btn) return;
+    state.freqUnit = btn.dataset.freq;
+    renderDetail();
+  });
+
+  document.getElementById("heat-prev").addEventListener("click", () => {
+    state.heatYear -= 1;
+    renderDetail();
+  });
+
+  document.getElementById("heat-next").addEventListener("click", () => {
+    state.heatYear += 1;
+    renderDetail();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (!els.detail.classList.contains("hidden")) closeDetail();
+    else if (!els.setup.classList.contains("hidden")) closeSetup();
+  });
 
   setInterval(renderClock, 60000);
   boot();
