@@ -109,11 +109,14 @@
           <div id="habit-grid" class="habit-grid"></div>
         </div>
 
-        <form id="add-form" class="add-form">
-          <label class="sr-only" for="habit-name">New habit</label>
-          <input id="habit-name" type="text" maxlength="48" placeholder="initialize a habit — e.g. morning run" required />
-          <button class="btn primary" type="submit">Add</button>
-        </form>
+        <div class="add-wrap">
+          <button id="add-toggle" class="add-toggle" type="button">+ new habit</button>
+          <form id="add-form" class="add-form hidden">
+            <label class="sr-only" for="habit-name">New habit</label>
+            <input id="habit-name" type="text" maxlength="48" placeholder="habit name" />
+            <button class="btn ghost" type="submit">save</button>
+          </form>
+        </div>
       </section>
     </main>
 

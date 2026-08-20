@@ -5,7 +5,7 @@
   const RING = 2 * Math.PI * 52;
 
   const CELL_W = 40;
-  const NAME_W = 228;
+  const NAME_W = 244;
   const TAIL_W = 132;
   const MIN_HISTORY = 90;
   const IDENTITY_HALF_LIFE = 21;
@@ -83,6 +83,7 @@
     gridWrap: document.getElementById("grid-wrap"),
     grid: document.getElementById("habit-grid"),
     addForm: document.getElementById("add-form"),
+    addToggle: document.getElementById("add-toggle"),
     habitName: document.getElementById("habit-name"),
     detail: document.getElementById("habit-detail"),
     detailName: document.getElementById("detail-name"),
@@ -109,6 +110,7 @@
     ignoreScroll: false,
     scoreMemo: new Map(),
     visIndex: -1,
+    dragHabitId: null,
     detailHabitId: null,
     freqUnit: "month",
     heatYear: new Date().getFullYear(),
@@ -590,7 +592,23 @@
     const first = state.data.habits.length === 1;
     forgetScores();
     schedulePush();
+    if (els.addForm) els.addForm.classList.add("hidden");
     render(first ? { pinToToday: true } : {});
+  }
+
+  function reorderHabits(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return;
+    const list = state.data.habits.slice();
+    const from = list.findIndex((habit) => habit.id === fromId);
+    if (from < 0) return;
+    const [item] = list.splice(from, 1);
+    const to = list.findIndex((habit) => habit.id === toId);
+    if (to < 0) return;
+    list.splice(to, 0, item);
+    log("reorderHabits", { fromId, toId, order: list.map((habit) => habit.name) });
+    state.data.habits = list;
+    schedulePush();
+    render();
   }
 
   function removeHabit(id) {
@@ -710,8 +728,9 @@
         const score = habitScore(habit);
         const caption = identityCaption(score);
         return `
-          <div class="habit-row">
+          <div class="habit-row" data-habit-row="${habit.id}">
             <div class="col-name">
+              <button class="drag-handle" type="button" draggable="true" data-drag="${habit.id}" aria-label="Reorder ${escapeHtml(habit.name)}">⋮⋮</button>
               <button class="habit-link" type="button" data-open="${habit.id}" aria-haspopup="dialog">
                 <span class="habit-index">${String(index + 1).padStart(2, "0")}</span>
                 <strong>${escapeHtml(habit.name)}</strong>
@@ -1135,12 +1154,62 @@
     if (check && !check.disabled) toggleCheck(check.dataset.habit, check.dataset.date);
   });
 
+  els.grid.addEventListener("dragstart", (event) => {
+    const handle = event.target.closest("[data-drag]");
+    if (!handle) {
+      event.preventDefault();
+      return;
+    }
+    state.dragHabitId = handle.dataset.drag;
+    event.dataTransfer.setData("text/plain", state.dragHabitId);
+    event.dataTransfer.effectAllowed = "move";
+    const row = handle.closest(".habit-row");
+    if (row) row.classList.add("dragging");
+    log("dragstart", { id: state.dragHabitId });
+  });
+
+  els.grid.addEventListener("dragover", (event) => {
+    if (!state.dragHabitId) return;
+    const row = event.target.closest(".habit-row");
+    if (!row) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    for (const item of els.grid.querySelectorAll(".habit-row.drag-over")) item.classList.remove("drag-over");
+    if (row.dataset.habitRow !== state.dragHabitId) row.classList.add("drag-over");
+  });
+
+  els.grid.addEventListener("drop", (event) => {
+    const row = event.target.closest(".habit-row");
+    if (!row || !state.dragHabitId) return;
+    event.preventDefault();
+    const toId = row.dataset.habitRow;
+    log("drop", { fromId: state.dragHabitId, toId });
+    reorderHabits(state.dragHabitId, toId);
+    state.dragHabitId = null;
+  });
+
+  els.grid.addEventListener("dragend", () => {
+    state.dragHabitId = null;
+    for (const item of els.grid.querySelectorAll(".habit-row.dragging, .habit-row.drag-over")) {
+      item.classList.remove("dragging", "drag-over");
+    }
+    log("dragend");
+  });
+
+  els.addToggle.addEventListener("click", () => {
+    const open = els.addForm.classList.contains("hidden");
+    els.addForm.classList.toggle("hidden");
+    log("add form toggle", { open });
+    if (open) {
+      els.habitName.focus();
+    }
+  });
+
   els.addForm.addEventListener("submit", (event) => {
     log("add form submit");
     event.preventDefault();
     addHabit(els.habitName.value);
     els.habitName.value = "";
-    els.habitName.focus();
   });
 
   els.gridWrap.addEventListener(

@@ -286,7 +286,7 @@ body {
 }
 
 .habit-grid {
-  --name-w: 228px;
+  --name-w: 244px;
   --tail-w: 132px;
   --cell-w: 40px;
   min-width: 100%;
@@ -321,7 +321,35 @@ body {
   width: var(--name-w);
   display: flex;
   align-items: center;
-  padding: 0 10px 0 2px;
+  gap: 2px;
+  padding: 0 8px 0 2px;
+}
+
+.drag-handle {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 12px;
+  letter-spacing: -2px;
+  line-height: 28px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.habit-row.dragging {
+  opacity: 0.45;
+}
+
+.habit-row.drag-over {
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 
 .col-days {
@@ -507,10 +535,34 @@ body {
   margin-bottom: 6px;
 }
 
+.add-wrap {
+  margin-top: 14px;
+}
+
+.add-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.add-toggle:hover,
+.add-toggle:focus-visible {
+  color: var(--accent-2);
+  outline: none;
+}
+
 .add-form {
   display: flex;
-  gap: 10px;
-  margin-top: 18px;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.add-form.hidden {
+  display: none;
 }
 
 .add-form input,
